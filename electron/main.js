@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { pathToFileURL } = require('url');
 
 const DB_FILE = 'games.json';
 
@@ -22,20 +23,30 @@ function writeGames(games) {
   fs.writeFileSync(getDbPath(), JSON.stringify(games, null, 2), 'utf-8');
 }
 
+function normalizeArgs(args) {
+  if (Array.isArray(args)) return args;
+  if (typeof args === 'string') return args.split(' ').map((s) => s.trim()).filter(Boolean);
+  return [];
+}
+
 function withDefaults(game) {
   return {
     id: game.id || Date.now(),
-    title: game.title,
-    execPath: game.execPath,
-    args: game.args || [],
-    coverUrl: game.coverUrl || '',
+    title: String(game.title || '').trim(),
+    execPath: String(game.execPath || '').trim(),
+    args: normalizeArgs(game.args),
+    coverUrl: String(game.coverUrl || '').trim(),
     color: game.color || 'from-slate-700 via-slate-600 to-slate-900',
     icon: game.icon || 'gamepad-2',
-    hours: game.hours || 0,
+    hours: Number(game.hours || 0),
     lastPlayed: game.lastPlayed || '未运行',
     isRecent: Boolean(game.isRecent),
     isFav: Boolean(game.isFav),
   };
+}
+
+function toFileUrl(filePath) {
+  return pathToFileURL(path.resolve(filePath)).toString();
 }
 
 async function fetchCover(title) {
@@ -66,16 +77,24 @@ function createWindow() {
 
 ipcMain.handle('games:get', () => readGames());
 ipcMain.handle('games:add', (_, game) => {
+  const payload = withDefaults(game);
+  if (!payload.title) return { ok: false, error: '游戏名称不能为空' };
+  if (!payload.execPath) return { ok: false, error: '启动路径不能为空' };
   const games = readGames();
-  const next = [...games, withDefaults(game)];
+  const next = [...games, payload];
   writeGames(next);
-  return next;
+  return { ok: true, game: payload };
 });
 ipcMain.handle('games:update', (_, id, patch) => {
   const games = readGames();
-  const next = games.map((g) => (g.id === id ? { ...g, ...patch } : g));
+  let updated = null;
+  const next = games.map((g) => {
+    if (g.id !== id) return g;
+    updated = { ...g, ...patch, args: normalizeArgs(patch.args ?? g.args) };
+    return updated;
+  });
   writeGames(next);
-  return next.find((g) => g.id === id) || null;
+  return updated;
 });
 ipcMain.handle('games:remove', (_, id) => {
   const next = readGames().filter((g) => g.id !== id);
@@ -86,12 +105,23 @@ ipcMain.handle('games:pickExecutable', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     filters: [
-      { name: 'Applications', extensions: ['exe', 'bat', 'cmd', 'app', 'sh'] },
+      { name: 'Applications', extensions: ['exe', 'bat', 'cmd', 'app', 'sh', 'lnk'] },
       { name: 'All Files', extensions: ['*'] },
     ],
   });
   if (result.canceled || !result.filePaths.length) return '';
   return result.filePaths[0];
+});
+ipcMain.handle('games:pickCoverFile', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [
+      { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  });
+  if (result.canceled || !result.filePaths.length) return '';
+  return toFileUrl(result.filePaths[0]);
 });
 ipcMain.handle('games:fetchCover', (_, title) => fetchCover(title));
 ipcMain.handle('games:launch', (_, id) => {
