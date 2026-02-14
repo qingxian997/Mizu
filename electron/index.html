@@ -269,7 +269,7 @@
                                         <div class="flex items-center gap-2 bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm border border-white/10"><i data-lucide="calendar" class="w-4 h-4"></i><span id="detail-last-played">--</span></div>
                                     </div>
                                     <div class="flex gap-4">
-                                        <button class="px-10 py-4 bg-white text-slate-900 rounded-2xl font-bold text-lg hover:bg-blue-50 hover:scale-105 transition-all shadow-lg flex items-center gap-3">
+                                        <button id="detail-launch-btn" class="px-10 py-4 bg-white text-slate-900 rounded-2xl font-bold text-lg hover:bg-blue-50 hover:scale-105 transition-all shadow-lg flex items-center gap-3">
                                             <i data-lucide="play" class="fill-current w-5 h-5"></i> 开始游戏
                                         </button>
                                         <button id="detail-ai-insight-btn" class="px-6 py-4 bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-2xl font-bold text-lg hover:bg-white/20 transition-all flex items-center gap-3">
@@ -448,6 +448,7 @@
             <!-- VIEW: Home -->
             <div id="view-Home" class="view-section hidden space-y-8 max-w-6xl mx-auto">
                 <div id="home-hero" class="relative w-full h-80 rounded-3xl overflow-hidden shadow-2xl group cursor-pointer">
+                    <div id="home-hero-image" class="absolute inset-0 bg-center bg-cover opacity-35"></div>
                     <div class="absolute inset-0 bg-gradient-to-r from-slate-900 to-slate-800"></div>
                     <div class="absolute inset-0 bg-gradient-to-r from-purple-900 via-blue-900 to-slate-900 opacity-80"></div>
                     <div class="absolute bottom-0 left-0 p-8 text-white max-w-2xl">
@@ -463,13 +464,13 @@
                         <div class="flex items-center gap-3">
                             <span id="home-last-updated" class="text-xs text-slate-500">未更新</span>
                             <button id="home-refresh-btn" class="px-3 py-1.5 text-xs rounded-full bg-white/70 border border-white/70 hover:bg-white transition-colors">刷新首页</button>
-                            <span class="text-xs text-slate-500">数据来源: CheapShark</span>
+                            <span class="text-xs text-slate-500">数据来源: 游民星空</span>
                         </div>
                     </div>
                     <div id="home-deals" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
                 </section>
                 <section>
-                    <div class="flex items-center justify-between mb-4"><h3 class="text-2xl font-bold text-slate-800">Steam 新闻</h3><span class="text-xs text-slate-500">数据来源: Steam News Feed</span></div>
+                    <div class="flex items-center justify-between mb-4"><h3 class="text-2xl font-bold text-slate-800">Steam 新闻</h3><span class="text-xs text-slate-500">数据来源: 3DM</span></div>
                     <div id="home-news" class="space-y-3"></div>
                 </section>
             </div>
@@ -839,9 +840,13 @@
 
         // --- 4. HOME LOGIC ---
         const HOME_API = {
-            deals: 'https://www.cheapshark.com/api/1.0/deals?storeID=1&pageSize=6&sortBy=Deal+Rating',
-            news: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://store.steampowered.com/feeds/news.xml'),
+            heroImage: 'https://cn.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1&mkt=zh-CN',
+            deals: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://www.gamersky.com/rssnew.xml'),
+            news: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://www.3dmgame.com/rss/'),
         };
+
+        const DEFAULT_PORTRAIT_COVER = 'https://images.weserv.nl/?url=store.steampowered.com/public/shared/images/responsive/header_logo.png&w=600&h=900&fit=cover';
+        const DEFAULT_LANDSCAPE_COVER = 'https://images.weserv.nl/?url=store.steampowered.com/public/shared/images/header/globalheader_logo.png&w=1280&h=720&fit=cover';
 
         function setHomeLoading() {
             const deals = document.getElementById('home-deals');
@@ -856,15 +861,12 @@
             node.innerText = `更新于 ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`;
         }
 
-        function renderDealCard(deal) {
+        function renderDealCard(item) {
             return `
-                <a href="https://www.cheapshark.com/redirect?dealID=${encodeURIComponent(deal.dealID)}" target="_blank" rel="noreferrer" class="glass-panel p-4 block hover:-translate-y-1 transition-all">
-                    <div class="text-sm text-slate-500 mb-1">${deal.storeID === '1' ? 'Steam' : 'Store #' + deal.storeID}</div>
-                    <div class="font-bold text-slate-800 mb-2 line-clamp-2">${deal.title}</div>
-                    <div class="flex items-center justify-between">
-                        <div><span class="text-xl font-bold theme-text">$${deal.salePrice}</span><span class="ml-2 text-xs text-slate-400 line-through">$${deal.normalPrice}</span></div>
-                        <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">-${Math.round(Number(deal.savings || 0))}%</span>
-                    </div>
+                <a href="${item.link}" target="_blank" rel="noreferrer" class="glass-panel p-4 block hover:-translate-y-1 transition-all">
+                    <div class="text-sm text-slate-500 mb-1">游民星空</div>
+                    <div class="font-bold text-slate-800 mb-2 line-clamp-2">${item.title}</div>
+                    <div class="text-xs text-slate-500">${new Date(item.pubDate).toLocaleString('zh-CN')}</div>
                 </a>
             `;
         }
@@ -878,22 +880,37 @@
             `;
         }
 
+        async function loadHomeHeroImage() {
+            try {
+                const res = await fetch(HOME_API.heroImage);
+                const data = await res.json();
+                const image = data?.images?.[0]?.url;
+                if (!image) return;
+                const fullUrl = image.startsWith('http') ? image : `https://cn.bing.com${image}`;
+                const hero = document.getElementById('home-hero-image');
+                if (hero) hero.style.backgroundImage = `url(${fullUrl})`;
+            } catch (e) {
+                // ignore
+            }
+        }
+
         async function loadHomeDeals() {
             const container = document.getElementById('home-deals');
             if (!container) return;
             try {
                 const res = await fetch(HOME_API.deals);
-                const deals = await res.json();
-                if (!Array.isArray(deals) || !deals.length) throw new Error('empty deals');
+                const payload = await res.json();
+                const items = payload.items || [];
+                if (!items.length) throw new Error('empty deals');
 
-                const top = deals[0];
+                const top = items[0];
                 document.getElementById('home-hero-title').innerText = top.title;
-                document.getElementById('home-hero-desc').innerText = `Steam 折扣价 $${top.salePrice}（原价 $${top.normalPrice}） | 评分 ${top.dealRating}`;
-                document.getElementById('home-hero-link').href = `https://www.cheapshark.com/redirect?dealID=${encodeURIComponent(top.dealID)}`;
+                document.getElementById('home-hero-desc').innerText = (top.description || '查看今日热门游戏资讯').replace(/<[^>]+>/g, '').slice(0, 80);
+                document.getElementById('home-hero-link').href = top.link || 'https://www.gamersky.com/';
 
-                container.innerHTML = deals.slice(0, 6).map(renderDealCard).join('');
+                container.innerHTML = items.slice(0, 6).map(renderDealCard).join('');
             } catch (e) {
-                container.innerHTML = '<div class="glass-panel p-4 text-slate-600">折扣加载失败，稍后重试。</div>';
+                container.innerHTML = '<div class="glass-panel p-4 text-slate-600">资讯加载失败，稍后重试。</div>';
             }
         }
 
@@ -908,8 +925,8 @@
                 container.innerHTML = items.slice(0, 5).map(renderNewsItem).join('');
             } catch (e) {
                 container.innerHTML = `
-                    <a href="https://store.steampowered.com/news/" target="_blank" rel="noreferrer" class="glass-panel p-4 block">
-                        <div class="font-semibold text-slate-800">新闻加载失败，点击前往 Steam 新闻中心</div>
+                    <a href="https://www.3dmgame.com/news/" target="_blank" rel="noreferrer" class="glass-panel p-4 block">
+                        <div class="font-semibold text-slate-800">新闻加载失败，点击前往 3DM 新闻中心</div>
                     </a>
                 `;
             }
@@ -917,7 +934,7 @@
 
         async function loadHomeContent() {
             setHomeLoading();
-            await Promise.all([loadHomeDeals(), loadHomeNews()]);
+            await Promise.all([loadHomeDeals(), loadHomeNews(), loadHomeHeroImage()]);
             updateHomeTimestamp();
         }
 
@@ -932,9 +949,6 @@
         let currentLibraryFilter = 'all';
         let isGridView = true;
         let currentGameForAI = null;
-
-        const detailPrimaryBtn = document.querySelector('#view-GameDetail .flex.gap-4 button');
-        if (detailPrimaryBtn) detailPrimaryBtn.id = 'detail-launch-btn';
 
         function getGameStyle(game) {
             if (game.coverUrl) return `background-image:url('${game.coverUrl}');background-size:cover;background-position:center;`;
@@ -1096,6 +1110,13 @@
                                     <button id="pick-cover-btn" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm">本地</button>
                                 </div>
                             </div>
+                            <div>
+                                <label class="text-sm text-slate-600">横屏封面地址（详情页背景）</label>
+                                <div class="flex gap-2 mt-1">
+                                    <input id="game-landscape-cover-input" class="flex-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="https://.../landscape.jpg 或本地图片" />
+                                    <button id="pick-landscape-cover-btn" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm">本地</button>
+                                </div>
+                            </div>
                         </div>
                         <div class="mt-6 flex justify-end gap-2">
                             <button id="game-form-cancel" class="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200">取消</button>
@@ -1120,11 +1141,13 @@
             const execInput = document.getElementById('game-exec-input');
             const argsInput = document.getElementById('game-args-input');
             const coverInput = document.getElementById('game-cover-input');
+            const landscapeCoverInput = document.getElementById('game-landscape-cover-input');
             document.getElementById('game-form-title').innerText = mode === 'add' ? '添加游戏' : '编辑游戏设置';
             titleInput.value = game?.title || '';
             execInput.value = game?.execPath || '';
             argsInput.value = Array.isArray(game?.args) ? game.args.join(' ') : (game?.args || '');
             coverInput.value = game?.coverUrl || '';
+            landscapeCoverInput.value = game?.landscapeCoverUrl || '';
             modal.classList.remove('hidden');
 
             document.getElementById('pick-exec-btn').onclick = async () => {
@@ -1137,10 +1160,22 @@
                 const p = await electronAPI.pickCoverFile();
                 if (p) coverInput.value = p;
             };
+            document.getElementById('pick-landscape-cover-btn').onclick = async () => {
+                if (!electronAPI?.pickCoverFile) return;
+                const p = await electronAPI.pickCoverFile();
+                if (p) landscapeCoverInput.value = p;
+            };
             document.getElementById('fetch-cover-btn').onclick = async () => {
                 const name = titleInput.value.trim();
                 if (!name || !electronAPI) return;
-                coverInput.value = await electronAPI.fetchCover(name);
+                const cover = await electronAPI.fetchCover(name);
+                if (typeof cover === 'string') {
+                    coverInput.value = cover || DEFAULT_PORTRAIT_COVER;
+                    landscapeCoverInput.value = cover || DEFAULT_LANDSCAPE_COVER;
+                } else {
+                    coverInput.value = cover?.portrait || DEFAULT_PORTRAIT_COVER;
+                    landscapeCoverInput.value = cover?.landscape || cover?.portrait || DEFAULT_LANDSCAPE_COVER;
+                }
             };
 
             document.getElementById('game-form-save').onclick = async () => {
@@ -1148,7 +1183,8 @@
                     title: titleInput.value.trim(),
                     execPath: execInput.value.trim(),
                     args: parseArgsInput(argsInput.value),
-                    coverUrl: coverInput.value.trim(),
+                    coverUrl: coverInput.value.trim() || DEFAULT_PORTRAIT_COVER,
+                    landscapeCoverUrl: landscapeCoverInput.value.trim() || DEFAULT_LANDSCAPE_COVER,
                 };
                 if (!payload.title) return alert('请填写游戏名称');
                 if (!payload.execPath) return alert('请填写启动路径');
@@ -1171,7 +1207,7 @@
                     }
                 } else {
                     if (mode === 'add') {
-                        allGames.push({ id: Date.now(), ...payload, isFav: false, isRecent: false, hours: 0, lastPlayed: '未运行', color: 'from-slate-700 via-slate-600 to-slate-900' });
+                        allGames.push({ id: Date.now(), ...payload, coverUrl: payload.coverUrl || DEFAULT_PORTRAIT_COVER, landscapeCoverUrl: payload.landscapeCoverUrl || DEFAULT_LANDSCAPE_COVER, isFav: false, isRecent: false, hours: 0, lastPlayed: '未运行', color: 'from-slate-700 via-slate-600 to-slate-900' });
                     } else {
                         allGames = allGames.map(g => g.id === game.id ? { ...g, ...payload } : g);
                     }
@@ -1221,6 +1257,7 @@
             addBtn.className = 'fixed right-8 bottom-8 z-50 w-14 h-14 rounded-full text-white shadow-xl hover:scale-110 transition-all theme-bg theme-hover';
             addBtn.innerHTML = '<i data-lucide="plus" class="w-6 h-6 mx-auto"></i>';
             addBtn.onclick = quickAddGame;
+            addBtn.classList.add('hidden');
             document.body.appendChild(addBtn);
 
             const actionRow = document.querySelector('#view-GameDetail .flex.gap-4');
@@ -1264,6 +1301,7 @@
             document.getElementById(`view-${target}`).classList.remove('hidden');
             
             // Sidebar Logic
+            const addBtn = document.getElementById('quick-add-game-btn');
             if(target === 'Library') {
                 sidebar.classList.remove('hidden');
                 sidebar.classList.add('md:flex');
@@ -1271,6 +1309,7 @@
                     viewToggleBtn.classList.add('fade-visible');
                     viewToggleBtn.classList.remove('fade-hidden');
                 }
+                addBtn?.classList.remove('hidden');
             } else {
                 sidebar.classList.add('hidden');
                 sidebar.classList.remove('md:flex');
@@ -1278,6 +1317,7 @@
                     viewToggleBtn.classList.remove('fade-visible');
                     viewToggleBtn.classList.add('fade-hidden');
                 }
+                document.getElementById('quick-add-game-btn')?.classList.add('hidden');
             }
         }
 
@@ -1337,9 +1377,10 @@
                 document.getElementById('detail-last-played').innerText = `上次: ${g.lastPlayed}`;
                 const hero = document.getElementById('detail-hero-bg');
                 hero.className = `absolute inset-0 bg-gradient-to-br ${g.color || 'from-slate-700 to-slate-900'} transition-colors duration-700`;
-                hero.style.backgroundImage = g.coverUrl ? `url(${g.coverUrl})` : '';
-                hero.style.backgroundSize = g.coverUrl ? 'cover' : '';
-                hero.style.backgroundPosition = g.coverUrl ? 'center' : '';
+                const detailCover = g.landscapeCoverUrl || g.coverUrl;
+                hero.style.backgroundImage = detailCover ? `url(${detailCover})` : '';
+                hero.style.backgroundSize = detailCover ? 'cover' : '';
+                hero.style.backgroundPosition = detailCover ? 'center' : '';
                 
                 updateDetailFavButton(g);
                 document.getElementById('view-Library').classList.add('hidden');
@@ -1350,6 +1391,7 @@
                     viewToggleBtn.classList.remove('fade-visible');
                     viewToggleBtn.classList.add('fade-hidden');
                 }
+                document.getElementById('quick-add-game-btn')?.classList.add('hidden');
             }
         });
 
@@ -1362,6 +1404,7 @@
                 viewToggleBtn.classList.add('fade-visible');
                 viewToggleBtn.classList.remove('fade-hidden');
             }
+            if (document.querySelector('.active-tab')?.dataset.tab === 'Library') document.getElementById('quick-add-game-btn')?.classList.remove('hidden');
             currentGameForAI = null;
         });
 

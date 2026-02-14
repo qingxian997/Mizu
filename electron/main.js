@@ -5,6 +5,8 @@ const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
 
 const DB_FILE = 'games.json';
+const DEFAULT_PORTRAIT_COVER = 'https://images.weserv.nl/?url=store.steampowered.com/public/shared/images/responsive/header_logo.png&w=600&h=900&fit=cover';
+const DEFAULT_LANDSCAPE_COVER = 'https://images.weserv.nl/?url=store.steampowered.com/public/shared/images/header/globalheader_logo.png&w=1280&h=720&fit=cover';
 
 function getDbPath() {
   return path.join(app.getPath('userData'), DB_FILE);
@@ -36,6 +38,7 @@ function withDefaults(game) {
     execPath: String(game.execPath || '').trim(),
     args: normalizeArgs(game.args),
     coverUrl: String(game.coverUrl || '').trim(),
+    landscapeCoverUrl: String(game.landscapeCoverUrl || '').trim(),
     color: game.color || 'from-slate-700 via-slate-600 to-slate-900',
     icon: game.icon || 'gamepad-2',
     hours: Number(game.hours || 0),
@@ -50,15 +53,40 @@ function toFileUrl(filePath) {
 }
 
 async function fetchCover(title) {
+  const fallback = { portrait: DEFAULT_PORTRAIT_COVER, landscape: DEFAULT_LANDSCAPE_COVER };
   try {
-    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(title)}&entity=software&limit=5`;
-    const res = await fetch(url);
-    const json = await res.json();
-    const item = (json.results || []).find(Boolean);
-    if (item?.artworkUrl512) return item.artworkUrl512;
-    if (item?.artworkUrl100) return item.artworkUrl100.replace('100x100bb', '512x512bb');
+    const steamSearch = await fetch(`https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(title)}&l=schinese&cc=CN`);
+    const steamJson = await steamSearch.json();
+    const first = steamJson?.items?.[0];
+    if (first?.id) {
+      const appId = first.id;
+      return {
+        portrait: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
+        landscape: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
+      };
+    }
   } catch {}
-  return `https://picsum.photos/seed/${encodeURIComponent(title)}/600/900`;
+
+  try {
+    const itunes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(title)}&entity=software&limit=5`);
+    const iJson = await itunes.json();
+    const item = (iJson.results || []).find(Boolean);
+    if (item?.artworkUrl512 || item?.artworkUrl100) {
+      const portrait = item.artworkUrl512 || item.artworkUrl100.replace('100x100bb', '512x512bb');
+      return { portrait, landscape: portrait };
+    }
+  } catch {}
+
+  return fallback;
+}
+
+function launchByShellOnWindows(execPath) {
+  const child = spawn('cmd.exe', ['/c', 'start', '', execPath], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  child.unref();
 }
 
 function createWindow() {
@@ -105,8 +133,8 @@ ipcMain.handle('games:pickExecutable', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     filters: [
-      { name: 'Applications', extensions: ['exe', 'bat', 'cmd', 'app', 'sh', 'lnk'] },
-      { name: 'All Files', extensions: ['*'] },
+      { name: '应用程序', extensions: ['exe', 'bat', 'cmd', 'app', 'sh', 'lnk', 'url'] },
+      { name: '所有文件', extensions: ['*'] },
     ],
   });
   if (result.canceled || !result.filePaths.length) return '';
@@ -116,8 +144,8 @@ ipcMain.handle('games:pickCoverFile', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     filters: [
-      { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] },
-      { name: 'All Files', extensions: ['*'] },
+      { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] },
+      { name: '所有文件', extensions: ['*'] },
     ],
   });
   if (result.canceled || !result.filePaths.length) return '';
@@ -130,13 +158,19 @@ ipcMain.handle('games:launch', (_, id) => {
   if (!game.execPath || !fs.existsSync(game.execPath)) return { ok: false, error: '游戏路径不存在' };
 
   try {
-    const child = spawn(game.execPath, game.args || [], {
-      cwd: path.dirname(game.execPath),
-      detached: true,
-      stdio: 'ignore',
-      shell: process.platform === 'win32',
-    });
-    child.unref();
+    const ext = path.extname(game.execPath).toLowerCase();
+    if (process.platform === 'win32' && ['.lnk', '.url'].includes(ext)) {
+      launchByShellOnWindows(game.execPath);
+    } else {
+      const child = spawn(game.execPath, game.args || [], {
+        cwd: path.dirname(game.execPath),
+        detached: true,
+        stdio: 'ignore',
+        shell: process.platform === 'win32',
+      });
+      child.unref();
+    }
+
     const next = readGames().map((g) => (g.id === id ? { ...g, lastPlayed: '刚刚', isRecent: true } : g));
     writeGames(next);
     return { ok: true };
