@@ -429,17 +429,32 @@
             <!-- VIEW: Community -->
             <div id="view-Community" class="view-section hidden h-full max-w-7xl mx-auto flex gap-6 pb-20">
                 <div class="flex-1 space-y-6 overflow-y-auto custom-scrollbar pr-2">
-                    <h2 class="text-xl font-bold px-2">好友动态</h2>
-                    <div class="glass-panel p-6">
-                        <div class="flex items-center gap-3 mb-4"><div class="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-sm shadow-md">A</div><div><div class="font-bold text-sm">Alex_Shooter</div><div class="text-xs text-slate-500">2小时前 • 玩《Apex 英雄》</div></div></div>
-                        <p class="text-slate-700 mb-4">这把绝了！最后那个圈简直是混乱，但我还是拿到了冠军！🏆</p>
+                    <div class="glass-panel p-5">
+                        <div class="flex items-center justify-between mb-3">
+                            <h2 class="text-xl font-bold">好友动态</h2>
+                            <div class="text-xs text-slate-500">本地动态 · 自动保存</div>
+                        </div>
+                        <textarea id="community-post-input" rows="3" maxlength="300" class="w-full px-4 py-3 rounded-xl border border-white/50 bg-white/70 theme-ring" placeholder="分享你今天的战绩、截图或游戏心情..."></textarea>
+                        <div class="flex items-center justify-between mt-3">
+                            <div id="community-post-status" class="text-xs text-slate-500">最多 300 字</div>
+                            <button id="community-post-btn" class="px-4 py-2 text-sm text-white rounded-lg transition-colors theme-bg theme-hover">发布动态</button>
+                        </div>
                     </div>
+                    <div id="community-feed" class="space-y-4"></div>
                 </div>
-                <div class="w-72 flex-shrink-0">
-                     <div class="p-5 acrylic-sidebar-bg sidebar-right-style h-full shadow-lg">
-                        <div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-700">好友列表</h2><span class="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">4 在线</span></div>
-                        <div class="space-y-3">
-                            <div class="flex items-center gap-3 p-2 rounded-xl hover:bg-black/5 cursor-pointer"><div class="w-8 h-8 rounded-full bg-indigo-500"></div><div><div class="text-sm font-bold">KillerQueen</div><div class="text-xs text-green-600">在线</div></div></div>
+                <div class="w-80 flex-shrink-0">
+                     <div class="p-5 acrylic-sidebar-bg sidebar-right-style h-full shadow-lg space-y-5">
+                        <div>
+                            <div class="flex items-center justify-between mb-3"><h2 class="text-lg font-bold text-slate-700">好友列表</h2><span id="community-online-count" class="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">0 在线</span></div>
+                            <div class="flex gap-2 mb-3 text-xs">
+                                <button class="community-friend-filter px-2 py-1 rounded-full bg-white/70 border border-white/60" data-status="all">全部</button>
+                                <button class="community-friend-filter px-2 py-1 rounded-full bg-white/70 border border-white/60" data-status="online">仅在线</button>
+                            </div>
+                            <div id="community-friends" class="space-y-2"></div>
+                        </div>
+                        <div class="glass-panel p-4">
+                            <h3 class="font-semibold text-slate-700 mb-3">今日社区热词</h3>
+                            <div id="community-trending" class="flex flex-wrap gap-2 text-xs"></div>
                         </div>
                     </div>
                 </div>
@@ -1177,6 +1192,13 @@
                                 </div>
                             </div>
                             <div>
+                                <label class="text-sm text-slate-600">工作目录（推荐设置为游戏安装目录）</label>
+                                <div class="flex gap-2 mt-1">
+                                    <input id="game-working-dir-input" class="flex-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="D:/Games/MyGame" />
+                                    <button id="pick-working-dir-btn" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm">选择</button>
+                                </div>
+                            </div>
+                            <div>
                                 <label class="text-sm text-slate-600">启动参数（可选）</label>
                                 <input id="game-args-input" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="--fullscreen --lang=zh" />
                             </div>
@@ -1217,12 +1239,14 @@
             const modal = document.getElementById('game-form-modal');
             const titleInput = document.getElementById('game-name-input');
             const execInput = document.getElementById('game-exec-input');
+            const workingDirInput = document.getElementById('game-working-dir-input');
             const argsInput = document.getElementById('game-args-input');
             const coverInput = document.getElementById('game-cover-input');
             const landscapeCoverInput = document.getElementById('game-landscape-cover-input');
             document.getElementById('game-form-title').innerText = mode === 'add' ? '添加游戏' : '编辑游戏设置';
             titleInput.value = game?.title || '';
             execInput.value = game?.execPath || '';
+            workingDirInput.value = game?.workingDir || '';
             argsInput.value = Array.isArray(game?.args) ? game.args.join(' ') : (game?.args || '');
             coverInput.value = game?.coverUrl || '';
             landscapeCoverInput.value = game?.landscapeCoverUrl || '';
@@ -1231,7 +1255,17 @@
             document.getElementById('pick-exec-btn').onclick = async () => {
                 if (!electronAPI) return;
                 const p = await electronAPI.pickExecutable();
-                if (p) execInput.value = p;
+                if (p) {
+                    execInput.value = p;
+                    if (!workingDirInput.value.trim()) {
+                        workingDirInput.value = p.replace(/[\\/][^\\/]+$/, '');
+                    }
+                }
+            };
+            document.getElementById('pick-working-dir-btn').onclick = async () => {
+                if (!electronAPI?.pickDirectory) return;
+                const p = await electronAPI.pickDirectory();
+                if (p) workingDirInput.value = p;
             };
             document.getElementById('pick-cover-btn').onclick = async () => {
                 if (!electronAPI?.pickCoverFile) return;
@@ -1261,6 +1295,7 @@
                     title: titleInput.value.trim(),
                     execPath: execInput.value.trim(),
                     args: parseArgsInput(argsInput.value),
+                    workingDir: workingDirInput.value.trim(),
                     coverUrl: coverInput.value.trim() || DEFAULT_PORTRAIT_COVER,
                     landscapeCoverUrl: landscapeCoverInput.value.trim() || DEFAULT_LANDSCAPE_COVER,
                 };
@@ -1285,7 +1320,7 @@
                     }
                 } else {
                     if (mode === 'add') {
-                        allGames.push({ id: Date.now(), ...payload, coverUrl: payload.coverUrl || DEFAULT_PORTRAIT_COVER, landscapeCoverUrl: payload.landscapeCoverUrl || DEFAULT_LANDSCAPE_COVER, isFav: false, isRecent: false, hours: 0, lastPlayed: '未运行', color: 'from-slate-700 via-slate-600 to-slate-900' });
+                        allGames.push({ id: Date.now(), ...payload, workingDir: payload.workingDir || payload.execPath.replace(/[\\/][^\\/]+$/, ''), coverUrl: payload.coverUrl || DEFAULT_PORTRAIT_COVER, landscapeCoverUrl: payload.landscapeCoverUrl || DEFAULT_LANDSCAPE_COVER, isFav: false, isRecent: false, hours: 0, lastPlayed: '未运行', color: 'from-slate-700 via-slate-600 to-slate-900' });
                     } else {
                         allGames = allGames.map(g => g.id === game.id ? { ...g, ...payload } : g);
                     }
@@ -1365,6 +1400,139 @@
             if(window.lucide) lucide.createIcons();
         }
 
+        const defaultCommunityPosts = [
+            { id: 1, author: 'Alex_Shooter', status: '2小时前 • 玩《Apex 英雄》', content: '这把绝了！最后那个圈简直是混乱，但我还是拿到了冠军！🏆', likes: 14, liked: false, createdAt: Date.now() - 7200000 },
+            { id: 2, author: 'MomoCraft', status: '5小时前 • 创意工坊', content: '新做了一个轻量化 MOD，帧数提升明显，晚上发链接。', likes: 8, liked: false, createdAt: Date.now() - 18000000 },
+        ];
+        const defaultFriends = [
+            { name: 'KillerQueen', status: 'online', game: '在线 · CS2', color: 'bg-indigo-500' },
+            { name: 'NeoRacer', status: 'online', game: '在线 · 地平线5', color: 'bg-orange-500' },
+            { name: 'Nora', status: 'offline', game: '离线 · 1小时前在线', color: 'bg-slate-500' },
+            { name: 'PixelFox', status: 'offline', game: '离线 · 3小时前在线', color: 'bg-pink-500' },
+        ];
+        let communityPosts = [];
+        let communityFriends = [];
+        let communityFriendFilter = 'all';
+
+        function loadCommunityState() {
+            communityPosts = JSON.parse(localStorage.getItem('steam_community_posts') || 'null') || [...defaultCommunityPosts];
+            communityFriends = JSON.parse(localStorage.getItem('steam_community_friends') || 'null') || [...defaultFriends];
+        }
+
+        function saveCommunityPosts() {
+            localStorage.setItem('steam_community_posts', JSON.stringify(communityPosts));
+        }
+
+        function renderCommunityFeed() {
+            const feed = document.getElementById('community-feed');
+            if (!feed) return;
+            if (!communityPosts.length) {
+                feed.innerHTML = '<div class="glass-panel p-6 text-sm text-slate-500">还没有动态，发一条试试吧。</div>';
+                return;
+            }
+            feed.innerHTML = communityPosts.sort((a, b) => b.createdAt - a.createdAt).map((post) => `
+                <article class="glass-panel p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <div class="font-semibold text-slate-800">${post.author}</div>
+                            <div class="text-xs text-slate-500">${post.status}</div>
+                        </div>
+                        <div class="text-xs text-slate-400">${new Date(post.createdAt).toLocaleString('zh-CN', { hour12: false })}</div>
+                    </div>
+                    <p class="text-slate-700 whitespace-pre-wrap">${post.content}</p>
+                    <button class="community-like-btn mt-4 px-3 py-1.5 text-xs rounded-full border ${post.liked ? 'bg-rose-100 text-rose-600 border-rose-200' : 'bg-white/70 border-white/50 text-slate-600'}" data-id="${post.id}">👍 ${post.likes}</button>
+                </article>
+            `).join('');
+
+            feed.querySelectorAll('.community-like-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const postId = Number(btn.dataset.id);
+                    communityPosts = communityPosts.map((post) => {
+                        if (post.id !== postId) return post;
+                        const liked = !post.liked;
+                        return { ...post, liked, likes: post.likes + (liked ? 1 : -1) };
+                    });
+                    saveCommunityPosts();
+                    renderCommunityFeed();
+                });
+            });
+        }
+
+        function renderCommunityFriends() {
+            const container = document.getElementById('community-friends');
+            const onlineCount = document.getElementById('community-online-count');
+            if (!container || !onlineCount) return;
+
+            const online = communityFriends.filter(f => f.status === 'online').length;
+            onlineCount.textContent = `${online} 在线`;
+
+            const list = communityFriends.filter(friend => communityFriendFilter === 'all' || friend.status === 'online');
+            container.innerHTML = list.map(friend => `
+                <div class="flex items-center gap-3 p-2 rounded-xl hover:bg-black/5 cursor-pointer">
+                    <div class="w-8 h-8 rounded-full ${friend.color}"></div>
+                    <div>
+                        <div class="text-sm font-bold">${friend.name}</div>
+                        <div class="text-xs ${friend.status === 'online' ? 'text-green-600' : 'text-slate-500'}">${friend.game}</div>
+                    </div>
+                </div>
+            `).join('') || '<div class="text-xs text-slate-500">当前没有在线好友。</div>';
+        }
+
+        function renderCommunityTrending() {
+            const target = document.getElementById('community-trending');
+            if (!target) return;
+            const words = ['DLC', '联机', '折扣', '工坊', 'MOD', '周末开黑'];
+            target.innerHTML = words.map((word) => `<span class="px-2 py-1 bg-white/80 rounded-full border border-white/70"># ${word}</span>`).join('');
+        }
+
+        function initCommunity() {
+            loadCommunityState();
+            renderCommunityFeed();
+            renderCommunityFriends();
+            renderCommunityTrending();
+
+            const postInput = document.getElementById('community-post-input');
+            const postBtn = document.getElementById('community-post-btn');
+            const postStatus = document.getElementById('community-post-status');
+            if (postInput && postStatus) {
+                postInput.addEventListener('input', () => {
+                    postStatus.textContent = `${postInput.value.length}/300`;
+                });
+            }
+            postBtn?.addEventListener('click', () => {
+                const content = postInput?.value.trim();
+                if (!content) {
+                    postStatus.textContent = '请输入内容后再发布';
+                    postStatus.classList.add('text-rose-500');
+                    return;
+                }
+                postStatus.classList.remove('text-rose-500');
+                communityPosts.push({
+                    id: Date.now(),
+                    author: '你',
+                    status: '刚刚 • 发布了新动态',
+                    content,
+                    likes: 0,
+                    liked: false,
+                    createdAt: Date.now(),
+                });
+                saveCommunityPosts();
+                postInput.value = '';
+                postStatus.textContent = '发布成功';
+                renderCommunityFeed();
+            });
+
+            document.querySelectorAll('.community-friend-filter').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    communityFriendFilter = btn.dataset.status;
+                    document.querySelectorAll('.community-friend-filter').forEach((item) => {
+                        item.classList.remove('theme-bg-light', 'theme-text');
+                    });
+                    btn.classList.add('theme-bg-light', 'theme-text');
+                    renderCommunityFriends();
+                });
+            });
+        }
 
 // --- NAVIGATION & TABS ---
         const tabs = document.querySelectorAll('.tab-btn');
@@ -1532,6 +1700,7 @@
         loadAIConfig();
         loadSettings();
         initGames();
+        initCommunity();
         loadHomeContent();
         document.getElementById('home-refresh-btn')?.addEventListener('click', loadHomeContent);
         renderPresets();
