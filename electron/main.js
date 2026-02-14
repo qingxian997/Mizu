@@ -52,14 +52,41 @@ function toFileUrl(filePath) {
   return pathToFileURL(path.resolve(filePath)).toString();
 }
 
+function isUriLaunchPath(execPath) {
+  return /^steam:\/\//i.test(execPath) || /^https?:\/\//i.test(execPath);
+}
+
+function openUri(uri) {
+  if (process.platform === 'win32') {
+    const child = spawn('cmd.exe', ['/c', 'start', '', uri], { detached: true, stdio: 'ignore', windowsHide: true });
+    child.unref();
+    return;
+  }
+  if (process.platform === 'darwin') {
+    const child = spawn('open', [uri], { detached: true, stdio: 'ignore' });
+    child.unref();
+    return;
+  }
+  const child = spawn('xdg-open', [uri], { detached: true, stdio: 'ignore' });
+  child.unref();
+}
+
+async function resolveSteamAppIdByTitle(title) {
+  try {
+    const url = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(title)}&l=schinese&cc=CN`;
+    const res = await fetch(url);
+    const data = await res.json();
+    return data?.items?.[0]?.id || null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchCover(title) {
   const fallback = { portrait: DEFAULT_PORTRAIT_COVER, landscape: DEFAULT_LANDSCAPE_COVER };
   try {
-    const steamSearch = await fetch(`https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(title)}&l=schinese&cc=CN`);
-    const steamJson = await steamSearch.json();
-    const first = steamJson?.items?.[0];
-    if (first?.id) {
-      const appId = first.id;
+    const appId = await resolveSteamAppIdByTitle(title);
+    if (appId) {
       return {
         portrait: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
         landscape: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
@@ -80,13 +107,47 @@ async function fetchCover(title) {
   return fallback;
 }
 
-function launchByShellOnWindows(execPath) {
-  const child = spawn('cmd.exe', ['/c', 'start', '', execPath], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-  });
-  child.unref();
+async function getSteamGameInfo(title, apiKey) {
+  const appId = await resolveSteamAppIdByTitle(title);
+  if (!appId) {
+    return {
+      found: false,
+      title,
+      message: '未在 Steam 上匹配到该游戏。',
+      steamdbUrl: `https://steamdb.info/search/?a=app&q=${encodeURIComponent(title)}`,
+      xiaoheiheUrl: `https://www.xiaoheihe.cn/app/search?key=${encodeURIComponent(title)}`,
+    };
+  }
+
+  let appData = null;
+  try {
+    const detailRes = await fetch(`https://store.steampowered.com/api/appdetails?appids=${appId}&l=schinese&cc=CN`);
+    const detailJson = await detailRes.json();
+    appData = detailJson?.[appId]?.data || null;
+  } catch {}
+
+  let currentPlayers = null;
+  if (apiKey) {
+    try {
+      const playersRes = await fetch(`https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?key=${encodeURIComponent(apiKey)}&appid=${appId}`);
+      const playersJson = await playersRes.json();
+      currentPlayers = playersJson?.response?.player_count ?? null;
+    } catch {}
+  }
+
+  return {
+    found: true,
+    appId,
+    title: appData?.name || title,
+    headerImage: appData?.header_image || `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
+    shortDescription: appData?.short_description || '暂无简介。',
+    genres: (appData?.genres || []).map((g) => g.description).slice(0, 4),
+    price: appData?.price_overview?.final_formatted || '价格信息暂不可用',
+    currentPlayers,
+    steamUrl: `https://store.steampowered.com/app/${appId}/`,
+    steamdbUrl: `https://steamdb.info/app/${appId}/`,
+    xiaoheiheUrl: `https://www.xiaoheihe.cn/app/search?key=${encodeURIComponent(appData?.name || title)}`,
+  };
 }
 
 function createWindow() {
@@ -152,30 +213,36 @@ ipcMain.handle('games:pickCoverFile', async () => {
   return toFileUrl(result.filePaths[0]);
 });
 ipcMain.handle('games:fetchCover', (_, title) => fetchCover(title));
+ipcMain.handle('steam:getGameInfo', (_, title, apiKey) => getSteamGameInfo(title, apiKey));
 ipcMain.handle('games:launch', (_, id) => {
   const game = readGames().find((g) => g.id === id);
   if (!game) return { ok: false, error: '游戏不存在' };
-  if (!game.execPath || !fs.existsSync(game.execPath)) return { ok: false, error: '游戏路径不存在' };
 
   try {
-    const ext = path.extname(game.execPath).toLowerCase();
-    if (process.platform === 'win32' && ['.lnk', '.url'].includes(ext)) {
-      launchByShellOnWindows(game.execPath);
+    if (isUriLaunchPath(game.execPath)) {
+      openUri(game.execPath);
     } else {
-      const child = spawn(game.execPath, game.args || [], {
-        cwd: path.dirname(game.execPath),
-        detached: true,
-        stdio: 'ignore',
-        shell: process.platform === 'win32',
-      });
-      child.unref();
+      if (!game.execPath || !fs.existsSync(game.execPath)) return { ok: false, error: '游戏路径不存在' };
+      const ext = path.extname(game.execPath).toLowerCase();
+      if (process.platform === 'win32' && ['.lnk', '.url'].includes(ext)) {
+        openUri(game.execPath);
+      } else {
+        const child = spawn(game.execPath, game.args || [], {
+          cwd: path.dirname(game.execPath),
+          detached: true,
+          stdio: 'ignore',
+          shell: false,
+          windowsHide: true,
+        });
+        child.unref();
+      }
     }
 
     const next = readGames().map((g) => (g.id === id ? { ...g, lastPlayed: '刚刚', isRecent: true } : g));
     writeGames(next);
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: error.message };
+    return { ok: false, error: error.message || '启动失败' };
   }
 });
 

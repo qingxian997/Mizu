@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   pickExecutable: () => ipcRenderer.invoke('games:pickExecutable'),
   pickCoverFile: () => ipcRenderer.invoke('games:pickCoverFile'),
   fetchCover: (title) => ipcRenderer.invoke('games:fetchCover', title),
+  getSteamGameInfo: (title, apiKey) => ipcRenderer.invoke('steam:getGameInfo', title, apiKey),
 });

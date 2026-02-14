@@ -464,13 +464,13 @@
                         <div class="flex items-center gap-3">
                             <span id="home-last-updated" class="text-xs text-slate-500">未更新</span>
                             <button id="home-refresh-btn" class="px-3 py-1.5 text-xs rounded-full bg-white/70 border border-white/70 hover:bg-white transition-colors">刷新首页</button>
-                            <span class="text-xs text-slate-500">数据来源: 游民星空</span>
+                            <span class="text-xs text-slate-500">数据来源: Steam</span>
                         </div>
                     </div>
                     <div id="home-deals" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
                 </section>
                 <section>
-                    <div class="flex items-center justify-between mb-4"><h3 class="text-2xl font-bold text-slate-800">Steam 新闻</h3><span class="text-xs text-slate-500">数据来源: 3DM</span></div>
+                    <div class="flex items-center justify-between mb-4"><h3 class="text-2xl font-bold text-slate-800">Steam 新闻</h3><span class="text-xs text-slate-500">数据来源: SteamDB</span></div>
                     <div id="home-news" class="space-y-3"></div>
                 </section>
             </div>
@@ -840,9 +840,8 @@
 
         // --- 4. HOME LOGIC ---
         const HOME_API = {
-            heroImage: 'https://cn.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1&mkt=zh-CN',
-            deals: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://www.gamersky.com/rssnew.xml'),
-            news: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://www.3dmgame.com/rss/'),
+            featured: 'https://store.steampowered.com/api/featuredcategories?cc=cn&l=schinese',
+            steamdbNews: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://steamdb.info/blog/rss/'),
         };
 
         const DEFAULT_PORTRAIT_COVER = 'https://images.weserv.nl/?url=store.steampowered.com/public/shared/images/responsive/header_logo.png&w=600&h=900&fit=cover';
@@ -851,8 +850,8 @@
         function setHomeLoading() {
             const deals = document.getElementById('home-deals');
             const news = document.getElementById('home-news');
-            if (deals) deals.innerHTML = '<div class="text-slate-500">正在加载折扣...</div>';
-            if (news) news.innerHTML = '<div class="text-slate-500">正在加载新闻...</div>';
+            if (deals) deals.innerHTML = '<div class="text-slate-500">正在加载 Steam 优惠...</div>';
+            if (news) news.innerHTML = '<div class="text-slate-500">正在加载 SteamDB 新闻...</div>';
         }
 
         function updateHomeTimestamp() {
@@ -861,12 +860,20 @@
             node.innerText = `更新于 ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`;
         }
 
+        function formatPrice(valueInCent) {
+            if (typeof valueInCent !== 'number') return '免费/暂无';
+            return `¥ ${(valueInCent / 100).toFixed(2)}`;
+        }
+
         function renderDealCard(item) {
             return `
-                <a href="${item.link}" target="_blank" rel="noreferrer" class="glass-panel p-4 block hover:-translate-y-1 transition-all">
-                    <div class="text-sm text-slate-500 mb-1">游民星空</div>
-                    <div class="font-bold text-slate-800 mb-2 line-clamp-2">${item.title}</div>
-                    <div class="text-xs text-slate-500">${new Date(item.pubDate).toLocaleString('zh-CN')}</div>
+                <a href="https://store.steampowered.com/app/${item.id}/" target="_blank" rel="noreferrer" class="glass-panel p-4 block hover:-translate-y-1 transition-all">
+                    <div class="text-sm text-slate-500 mb-1">Steam</div>
+                    <div class="font-bold text-slate-800 mb-2 line-clamp-2">${item.name}</div>
+                    <div class="flex items-center justify-between">
+                        <div><span class="text-xl font-bold theme-text">${formatPrice(item.final_price)}</span>${item.original_price ? `<span class="ml-2 text-xs text-slate-400 line-through">${formatPrice(item.original_price)}</span>` : ''}</div>
+                        <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">-${item.discount_percent || 0}%</span>
+                    </div>
                 </a>
             `;
         }
@@ -880,37 +887,26 @@
             `;
         }
 
-        async function loadHomeHeroImage() {
-            try {
-                const res = await fetch(HOME_API.heroImage);
-                const data = await res.json();
-                const image = data?.images?.[0]?.url;
-                if (!image) return;
-                const fullUrl = image.startsWith('http') ? image : `https://cn.bing.com${image}`;
-                const hero = document.getElementById('home-hero-image');
-                if (hero) hero.style.backgroundImage = `url(${fullUrl})`;
-            } catch (e) {
-                // ignore
-            }
-        }
-
         async function loadHomeDeals() {
             const container = document.getElementById('home-deals');
             if (!container) return;
             try {
-                const res = await fetch(HOME_API.deals);
+                const res = await fetch(HOME_API.featured);
                 const payload = await res.json();
-                const items = payload.items || [];
-                if (!items.length) throw new Error('empty deals');
+                const items = payload?.specials?.items || payload?.top_sellers?.items || [];
+                if (!items.length) throw new Error('empty featured');
 
                 const top = items[0];
-                document.getElementById('home-hero-title').innerText = top.title;
-                document.getElementById('home-hero-desc').innerText = (top.description || '查看今日热门游戏资讯').replace(/<[^>]+>/g, '').slice(0, 80);
-                document.getElementById('home-hero-link').href = top.link || 'https://www.gamersky.com/';
+                document.getElementById('home-hero-title').innerText = top.name;
+                document.getElementById('home-hero-desc').innerText = `Steam 当前价 ${formatPrice(top.final_price)}，折扣 ${top.discount_percent || 0}%`;
+                document.getElementById('home-hero-link').href = `https://store.steampowered.com/app/${top.id}/`;
+                const hero = document.getElementById('home-hero-image');
+                const image = top.large_capsule_image || top.header_image || top.small_capsule_image;
+                hero.style.backgroundImage = image ? `url(${image})` : '';
 
                 container.innerHTML = items.slice(0, 6).map(renderDealCard).join('');
             } catch (e) {
-                container.innerHTML = '<div class="glass-panel p-4 text-slate-600">资讯加载失败，稍后重试。</div>';
+                container.innerHTML = '<div class="glass-panel p-4 text-slate-600">Steam 优惠加载失败，稍后重试。</div>';
             }
         }
 
@@ -918,15 +914,15 @@
             const container = document.getElementById('home-news');
             if (!container) return;
             try {
-                const res = await fetch(HOME_API.news);
+                const res = await fetch(HOME_API.steamdbNews);
                 const payload = await res.json();
                 const items = payload.items || [];
                 if (!items.length) throw new Error('empty news');
                 container.innerHTML = items.slice(0, 5).map(renderNewsItem).join('');
             } catch (e) {
                 container.innerHTML = `
-                    <a href="https://www.3dmgame.com/news/" target="_blank" rel="noreferrer" class="glass-panel p-4 block">
-                        <div class="font-semibold text-slate-800">新闻加载失败，点击前往 3DM 新闻中心</div>
+                    <a href="https://steamdb.info/blog/" target="_blank" rel="noreferrer" class="glass-panel p-4 block">
+                        <div class="font-semibold text-slate-800">SteamDB 新闻加载失败，点击前往官网</div>
                     </a>
                 `;
             }
@@ -934,7 +930,7 @@
 
         async function loadHomeContent() {
             setHomeLoading();
-            await Promise.all([loadHomeDeals(), loadHomeNews(), loadHomeHeroImage()]);
+            await Promise.all([loadHomeDeals(), loadHomeNews()]);
             updateHomeTimestamp();
         }
 
@@ -1029,6 +1025,88 @@
 
         function parseArgsInput(value = '') {
             return value.split(' ').map(s => s.trim()).filter(Boolean);
+        }
+
+        function getSteamApiKey() {
+            return localStorage.getItem('steam_api_key') || '';
+        }
+
+        function ensureSteamApiSettingCard() {
+            const container = document.getElementById('settings-storage');
+            if (!container || document.getElementById('steam-api-key-input')) return;
+            const card = document.createElement('div');
+            card.className = 'p-5 bg-white/40 rounded-2xl border border-white/50 space-y-3';
+            card.innerHTML = `
+                <h4 class="font-bold text-slate-700">Steam API 设置</h4>
+                <p class="text-xs text-slate-500">用于在游戏详情页获取 Steam 在线人数等信息（可选）。</p>
+                <input id="steam-api-key-input" type="password" placeholder="请输入 Steam Web API Key" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm theme-ring" />
+                <button id="save-steam-api-key-btn" class="px-4 py-2 text-white text-sm rounded-lg theme-bg theme-hover">保存 Steam Key</button>
+                <div class="text-xs text-slate-500">申请地址：<a class="underline" href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noreferrer">steamcommunity.com/dev/apikey</a></div>
+            `;
+            container.appendChild(card);
+            document.getElementById('steam-api-key-input').value = getSteamApiKey();
+            document.getElementById('save-steam-api-key-btn').addEventListener('click', () => {
+                const v = document.getElementById('steam-api-key-input').value.trim();
+                localStorage.setItem('steam_api_key', v);
+                alert('Steam API Key 已保存');
+            });
+        }
+
+        function ensureSteamDetailPanel() {
+            if (document.getElementById('steam-detail-panel')) return;
+            const rightCol = document.querySelector('#view-GameDetail .grid .space-y-8');
+            if (!rightCol) return;
+            const panel = document.createElement('div');
+            panel.id = 'steam-detail-panel';
+            panel.className = 'glass-panel p-6';
+            panel.innerHTML = `
+                <h3 class="font-bold text-xl mb-4">Steam / SteamDB / 小黑盒</h3>
+                <div id="steam-detail-content" class="text-sm text-slate-600">请先打开一个游戏详情。</div>
+            `;
+            rightCol.appendChild(panel);
+        }
+
+        async function loadSteamDetailInfo(game) {
+            ensureSteamDetailPanel();
+            const container = document.getElementById('steam-detail-content');
+            if (!container || !game) return;
+            container.innerHTML = '正在查询 Steam 相关信息...';
+            try {
+                if (!electronAPI?.getSteamGameInfo) {
+                    container.innerHTML = '当前不是 Electron 运行环境，无法查询 Steam API。';
+                    return;
+                }
+                const key = getSteamApiKey();
+                const info = await electronAPI.getSteamGameInfo(game.title, key);
+                if (!info?.found) {
+                    container.innerHTML = `
+                        <div class="space-y-2">
+                            <div class="text-slate-700">${info?.message || '未找到相关信息'}</div>
+                            <a class="underline theme-text" href="${info?.steamdbUrl || '#'}" target="_blank" rel="noreferrer">在 SteamDB 搜索</a>
+                            <a class="underline theme-text block" href="${info?.xiaoheiheUrl || '#'}" target="_blank" rel="noreferrer">在小黑盒搜索</a>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div class="space-y-3">
+                        <div class="font-semibold text-slate-800">${info.title}</div>
+                        <img src="${info.headerImage}" class="w-full rounded-lg border border-white/50" />
+                        <div class="text-slate-600">${info.shortDescription}</div>
+                        <div class="text-slate-700">价格：<span class="font-semibold">${info.price}</span></div>
+                        <div class="text-slate-700">当前在线：<span class="font-semibold">${info.currentPlayers ?? '未提供（请检查 Steam Key）'}</span></div>
+                        <div class="text-slate-700">类型：${(info.genres || []).join(' / ') || '未知'}</div>
+                        <div class="flex flex-wrap gap-3 text-xs">
+                            <a class="underline theme-text" href="${info.steamUrl}" target="_blank" rel="noreferrer">Steam 商店</a>
+                            <a class="underline theme-text" href="${info.steamdbUrl}" target="_blank" rel="noreferrer">SteamDB</a>
+                            <a class="underline theme-text" href="${info.xiaoheiheUrl}" target="_blank" rel="noreferrer">小黑盒</a>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                container.innerHTML = '获取 Steam 信息失败，请稍后重试。';
+            }
         }
 
         window.toggleFavorite = async (id) => {
@@ -1282,6 +1360,8 @@
                 if (currentGameForAI) window.launchGame(currentGameForAI.id);
             });
 
+            ensureSteamApiSettingCard();
+            ensureSteamDetailPanel();
             if(window.lucide) lucide.createIcons();
         }
 
@@ -1383,6 +1463,7 @@
                 hero.style.backgroundPosition = detailCover ? 'center' : '';
                 
                 updateDetailFavButton(g);
+                loadSteamDetailInfo(g);
                 document.getElementById('view-Library').classList.add('hidden');
                 document.getElementById('view-GameDetail').classList.remove('hidden');
                 sidebar.classList.add('hidden');
