@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -154,6 +154,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -161,7 +162,47 @@ function createWindow() {
     },
   });
 
+  win.once('ready-to-show', () => win.show());
   win.loadFile(path.join(__dirname, 'index.html'));
+  return win;
+}
+
+let mainWindow = null;
+let tray = null;
+let forceQuit = false;
+
+function getTrayIcon() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#2563eb"/><path d="M19 27h26v8H19z" fill="#fff"/><path d="M25 21h14v6H25zM25 35h14v8H25z" fill="#bfdbfe"/></svg>`;
+  return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
+}
+
+function showMainWindow() {
+  if (!mainWindow) return;
+  mainWindow.setSkipTaskbar(false);
+  if (!mainWindow.isVisible()) mainWindow.show();
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.focus();
+}
+
+function hideToTray() {
+  if (!mainWindow) return;
+  mainWindow.hide();
+  mainWindow.setSkipTaskbar(true);
+}
+
+function createTray() {
+  tray = new Tray(getTrayIcon());
+  tray.setToolTip('Steam 游戏库');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '打开主界面', click: showMainWindow },
+    {
+      label: '退出', click: () => {
+        forceQuit = true;
+        app.quit();
+      },
+    },
+  ]));
+  tray.on('double-click', showMainWindow);
 }
 
 ipcMain.handle('games:get', () => readGames());
@@ -246,7 +287,30 @@ ipcMain.handle('games:launch', (_, id) => {
   }
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  mainWindow = createWindow();
+  createTray();
+
+  mainWindow.on('close', (event) => {
+    if (forceQuit) return;
+    event.preventDefault();
+    hideToTray();
+  });
+
+  mainWindow.on('minimize', (event) => {
+    event.preventDefault();
+    hideToTray();
+  });
+
+  app.on('activate', () => {
+    if (mainWindow) showMainWindow();
+  });
+});
+
+app.on('before-quit', () => {
+  forceQuit = true;
+});
+
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin' && forceQuit) app.quit();
 });
