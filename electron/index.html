@@ -823,31 +823,34 @@
         }
 
         // --- 4. GAME & UI LOGIC ---
-        const games = [
+        const defaultGames = [
             { id: 1, title: "艾尔登法环", color: "from-amber-900 via-yellow-700 to-amber-900", icon: "ring", hours: 128, lastPlayed: "昨天", isRecent: true, isFav: true },
             { id: 2, title: "赛博朋克 2077", color: "from-yellow-400 via-yellow-300 to-yellow-500", icon: "cpu", hours: 64, lastPlayed: "3天前", isRecent: true, isFav: false },
-            { id: 3, title: "星露谷物语", color: "from-sky-400 via-blue-300 to-green-400", icon: "sprout", hours: 240, lastPlayed: "上周", isRecent: false, isFav: true },
-            { id: 4, title: "黑帝斯", color: "from-red-900 via-red-600 to-orange-500", icon: "flame", hours: 45, lastPlayed: "2天前", isRecent: true, isFav: true },
-            { id: 5, title: "博德之门 3", color: "from-purple-900 via-slate-800 to-red-900", icon: "dices", hours: 80, lastPlayed: "今天", isRecent: true, isFav: true },
-            { id: 6, title: "空洞骑士", color: "from-slate-800 via-slate-600 to-slate-900", icon: "bug", hours: 30, lastPlayed: "一月前", isRecent: false, isFav: false },
-            { id: 7, title: "Apex 英雄", color: "from-red-600 via-slate-200 to-red-700", icon: "crosshair", hours: 500, lastPlayed: "今天", isRecent: true, isFav: false },
-            { id: 8, title: "我的世界", color: "from-green-600 via-green-500 to-emerald-800", icon: "box", hours: 999, lastPlayed: "去年", isRecent: false, isFav: false },
         ];
-        
-        let allGames = [...games];
+
+        const electronAPI = window.electronAPI || null;
+        let allGames = [];
         let currentLibraryFilter = 'all';
         let isGridView = true;
         let currentGameForAI = null;
 
-        // Render Logic
+        const detailPrimaryBtn = document.querySelector('#view-GameDetail .flex.gap-4 button');
+        if (detailPrimaryBtn) detailPrimaryBtn.id = 'detail-launch-btn';
+
+        function getGameStyle(game) {
+            if (game.coverUrl) return `background-image:url('${game.coverUrl}');background-size:cover;background-position:center;`;
+            return '';
+        }
+
         function renderSidebarGameList() {
              const listContainer = document.getElementById('sidebar-games');
-             listContainer.innerHTML = games.slice(0, 5).map(game => `
+             listContainer.innerHTML = allGames.slice(0, 8).map(game => `
                 <div class="flex items-center gap-4 px-4 py-3 mx-2 rounded-r-full cursor-pointer transition-all duration-200 group text-slate-600 hover:bg-black/5" onclick="document.dispatchEvent(new CustomEvent('openGameDetail', {detail: ${game.id}}))">
                     <div class="transition-transform duration-200 group-hover:scale-110"><i data-lucide="gamepad-2" class="w-5 h-5"></i></div>
                     <span class="font-medium text-sm truncate">${game.title}</span>
                 </div>
              `).join('');
+             if(window.lucide) lucide.createIcons();
         }
 
         function renderLibraryGrid(filter, searchTerm = '') {
@@ -856,8 +859,8 @@
 
             let filteredGames = [];
             if (filter === 'all') filteredGames = allGames;
-            else if (filter === 'recent') filteredGames = games.filter(g => g.isRecent);
-            else if (filter === 'favorites') filteredGames = games.filter(g => g.isFav);
+            else if (filter === 'recent') filteredGames = allGames.filter(g => g.isRecent);
+            else if (filter === 'favorites') filteredGames = allGames.filter(g => g.isFav);
 
             if (searchTerm) {
                 const term = searchTerm.toLowerCase();
@@ -865,10 +868,10 @@
             }
 
             if (filteredGames.length === 0) {
-                 gridContainer.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-20 text-slate-400"><i data-lucide="ghost" class="w-16 h-16 mb-4 opacity-50"></i><p class="text-lg">没有找到游戏</p></div>`;
-                 gridContainer.style.gridTemplateColumns = '1fr'; 
-                 if(window.lucide) lucide.createIcons();
-                 return;
+                gridContainer.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-20 text-slate-400"><i data-lucide="ghost" class="w-16 h-16 mb-4 opacity-50"></i><p class="text-lg">没有找到游戏，点击右下角 + 添加游戏</p></div>`;
+                gridContainer.style.gridTemplateColumns = '1fr';
+                if(window.lucide) lucide.createIcons();
+                return;
             }
 
             if (isGridView) {
@@ -877,16 +880,12 @@
                 gridContainer.innerHTML = filteredGames.map((game) => `
                 <div class="game-card group relative w-full aspect-[3/4] rounded-3xl transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl cursor-pointer" onclick="document.dispatchEvent(new CustomEvent('openGameDetail', {detail: ${game.id}}))">
                     <div class="absolute inset-0 rounded-3xl overflow-hidden bg-white/40 backdrop-blur-md shadow-md border border-white/20">
-                        <div class="absolute inset-0 bg-gradient-to-br ${game.color} opacity-80 transition-transform duration-700 group-hover:scale-110"></div>
+                        <div class="absolute inset-0 bg-gradient-to-br ${game.color || 'from-slate-700 to-slate-900'} opacity-80 transition-transform duration-700 group-hover:scale-110" style="${getGameStyle(game)}"></div>
                         <div class="absolute top-6 left-0 w-full text-center px-4"><h3 class="text-white font-bold text-2xl drop-shadow-md">${game.title}</h3></div>
-                        <div class="absolute inset-0 z-10 pointer-events-none">
-                            <div class="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/30 to-transparent opacity-60 rounded-t-3xl"></div>
-                            <div class="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/10 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                        </div>
                         <button class="absolute top-3 right-3 z-30 p-2 rounded-full transition-all duration-200 ${game.isFav ? 'text-yellow-400 opacity-100' : 'text-white opacity-0 group-hover:opacity-100 hover:bg-black/20'}" onclick="event.stopPropagation(); window.toggleFavorite(${game.id});"><i data-lucide="star" class="w-5 h-5 ${game.isFav ? 'fill-current' : ''}"></i></button>
                         <div class="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-between p-4 z-20">
-                            <div class="text-white/80 text-xs font-bold uppercase tracking-wider mb-2">${game.hours}H</div>
-                            <button class="w-10 h-10 rounded-full bg-white text-slate-900 flex items-center justify-center shadow-lg hover:scale-110 transition-transform"><i data-lucide="play" class="w-4 h-4 fill-current"></i></button>
+                            <div class="text-white/80 text-xs font-bold uppercase tracking-wider mb-2">${game.hours || 0}H</div>
+                            <button class="w-10 h-10 rounded-full bg-white text-slate-900 flex items-center justify-center shadow-lg hover:scale-110 transition-transform" onclick="event.stopPropagation(); window.launchGame(${game.id});"><i data-lucide="play" class="w-4 h-4 fill-current"></i></button>
                         </div>
                     </div>
                 </div>`).join('');
@@ -895,55 +894,122 @@
                 gridContainer.className = "view-section flex flex-col gap-2 pb-20";
                 gridContainer.innerHTML = filteredGames.map((game) => `
                 <div class="list-row flex items-center justify-between p-4 bg-white/60 backdrop-blur-md rounded-xl cursor-pointer border border-white/50" onclick="document.dispatchEvent(new CustomEvent('openGameDetail', {detail: ${game.id}}))">
-                      <div class="flex items-center gap-4">
-                        <div class="w-12 h-12 rounded-lg bg-gradient-to-br ${game.color} shadow-sm flex items-center justify-center text-white"><i data-lucide="${game.icon || 'gamepad-2'}" class="w-6 h-6"></i></div>
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-lg bg-gradient-to-br ${game.color || 'from-slate-700 to-slate-900'} shadow-sm flex items-center justify-center text-white overflow-hidden" style="${getGameStyle(game)}">${game.coverUrl ? '' : `<i data-lucide="${game.icon || 'gamepad-2'}" class="w-6 h-6"></i>`}</div>
                         <div class="flex items-center gap-2">
                             <button class="p-1 rounded-full transition-colors ${game.isFav ? 'text-yellow-500' : 'text-slate-300 hover:text-yellow-400'}" onclick="event.stopPropagation(); window.toggleFavorite(${game.id});"><i data-lucide="star" class="w-4 h-4 ${game.isFav ? 'fill-current' : ''}"></i></button>
-                            <div><div class="font-bold text-slate-800">${game.title}</div><div class="text-xs text-slate-500">上次运行: ${game.lastPlayed}</div></div>
+                            <div><div class="font-bold text-slate-800">${game.title}</div><div class="text-xs text-slate-500">上次运行: ${game.lastPlayed || '未运行'}</div></div>
                         </div>
-                      </div>
-                      <div class="flex items-center gap-6">
-                        <div class="text-sm font-medium text-slate-600 bg-slate-100/50 px-3 py-1 rounded-full border border-white/20">${game.hours} 小时</div>
-                        <button class="p-2 bg-blue-50/50 text-blue-600 rounded-full hover:bg-blue-100 hover:scale-110 transition-all border border-blue-100"><i data-lucide="play" class="w-5 h-5 fill-current"></i></button>
-                      </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <button class="p-2 bg-blue-50/50 text-blue-600 rounded-full hover:bg-blue-100 hover:scale-110 transition-all border border-blue-100" onclick="event.stopPropagation(); window.launchGame(${game.id});"><i data-lucide="play" class="w-5 h-5 fill-current"></i></button>
+                    </div>
                 </div>`).join('');
             }
             if(window.lucide) lucide.createIcons();
         }
 
-        window.toggleFavorite = (id) => {
-            const game = games.find(g => g.id === id);
-            if (game) {
-                game.isFav = !game.isFav;
-                const searchTerm = document.getElementById('global-search').value;
-                renderLibraryGrid(currentLibraryFilter, searchTerm);
-                if (currentGameForAI && currentGameForAI.id === id) updateDetailFavButton(game);
+        function refreshLibrary() {
+            renderSidebarGameList();
+            renderLibraryGrid(currentLibraryFilter, document.getElementById('global-search').value);
+        }
+
+        window.toggleFavorite = async (id) => {
+            const game = allGames.find(g => g.id === id);
+            if (!game) return;
+            game.isFav = !game.isFav;
+            if (electronAPI) await electronAPI.updateGame(id, { isFav: game.isFav });
+            refreshLibrary();
+            if (currentGameForAI && currentGameForAI.id === id) updateDetailFavButton(game);
+        };
+
+        window.launchGame = async (id) => {
+            const game = allGames.find(g => g.id === id);
+            if (!game) return;
+            if (!electronAPI) {
+                alert('当前运行环境不是 Electron，无法启动本地游戏。');
+                return;
+            }
+            const result = await electronAPI.launchGame(id);
+            if (!result.ok) alert(`启动失败: ${result.error}`);
+            else {
+                game.lastPlayed = '刚刚';
+                game.isRecent = true;
+                refreshLibrary();
             }
         };
 
         function updateDetailFavButton(game) {
             const btn = document.getElementById('detail-fav-btn');
             if (!btn) return;
-            
             if (game.isFav) {
                 btn.className = "p-4 bg-yellow-400 text-white rounded-2xl hover:brightness-110 transition-all";
-                // 修复：直接重置 HTML 内容，避免 Lucide 图标替换导致的引用错误
                 btn.innerHTML = `<i data-lucide="star" class="w-6 h-6 fill-current"></i>`;
             } else {
                 btn.className = "p-4 bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-2xl hover:bg-white/20 transition-all";
-                // 修复：直接重置 HTML 内容
                 btn.innerHTML = `<i data-lucide="star" class="w-6 h-6"></i>`;
             }
             if(window.lucide) lucide.createIcons();
         }
 
         window.toggleDetailFavorite = () => {
-            if (currentGameForAI) {
-                window.toggleFavorite(currentGameForAI.id);
-            }
+            if (currentGameForAI) window.toggleFavorite(currentGameForAI.id);
         };
 
-        // --- NAVIGATION & TABS ---
+        async function quickAddGame() {
+            if (!electronAPI) {
+                alert('请在 Electron 应用内添加游戏。');
+                return;
+            }
+            const execPath = await electronAPI.pickExecutable();
+            if (!execPath) return;
+            const title = prompt('请输入游戏名称：');
+            if (!title || !title.trim()) return;
+            const cover = await electronAPI.fetchCover(title.trim());
+            await electronAPI.addGame({ title: title.trim(), execPath, coverUrl: cover || '' });
+            allGames = await electronAPI.getGames();
+            refreshLibrary();
+        }
+
+        async function removeCurrentGame() {
+            if (!currentGameForAI || !electronAPI) return;
+            if (!confirm(`确定删除「${currentGameForAI.title}」吗？`)) return;
+            await electronAPI.removeGame(currentGameForAI.id);
+            allGames = await electronAPI.getGames();
+            document.getElementById('back-to-library').click();
+            refreshLibrary();
+        }
+
+        async function initGames() {
+            if (electronAPI) {
+                allGames = await electronAPI.getGames();
+            }
+            if (!allGames.length) allGames = [...defaultGames];
+            refreshLibrary();
+
+            const addBtn = document.createElement('button');
+            addBtn.id = 'quick-add-game-btn';
+            addBtn.title = '添加游戏';
+            addBtn.className = 'fixed right-8 bottom-8 z-50 w-14 h-14 rounded-full text-white shadow-xl hover:scale-110 transition-all theme-bg theme-hover';
+            addBtn.innerHTML = '<i data-lucide="plus" class="w-6 h-6 mx-auto"></i>';
+            addBtn.onclick = quickAddGame;
+            document.body.appendChild(addBtn);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.id = 'detail-remove-btn';
+            removeBtn.title = '删除游戏';
+            removeBtn.className = 'p-4 bg-red-500/80 text-white rounded-2xl hover:bg-red-500 transition-all';
+            removeBtn.innerHTML = '<i data-lucide="trash-2" class="w-6 h-6"></i>';
+            removeBtn.onclick = removeCurrentGame;
+            document.querySelector('#view-GameDetail .flex.gap-4')?.appendChild(removeBtn);
+
+            document.getElementById('detail-launch-btn')?.addEventListener('click', () => {
+                if (currentGameForAI) window.launchGame(currentGameForAI.id);
+            });
+            if(window.lucide) lucide.createIcons();
+        }
+
+// --- NAVIGATION & TABS ---
         const tabs = document.querySelectorAll('.tab-btn');
         const views = document.querySelectorAll('.view-section');
         const sidebar = document.getElementById('main-sidebar');
@@ -1023,13 +1089,17 @@
 
         // Detail View Logic
         document.addEventListener('openGameDetail', (e) => {
-            const g = games.find(game => game.id === e.detail);
+            const g = allGames.find(game => game.id === e.detail);
             if(g) {
                 currentGameForAI = g;
                 document.getElementById('detail-logo').innerText = g.title;
                 document.getElementById('detail-hours').innerText = `${g.hours} 小时`;
                 document.getElementById('detail-last-played').innerText = `上次: ${g.lastPlayed}`;
-                document.getElementById('detail-hero-bg').className = `absolute inset-0 bg-gradient-to-br ${g.color} transition-colors duration-700`;
+                const hero = document.getElementById('detail-hero-bg');
+                hero.className = `absolute inset-0 bg-gradient-to-br ${g.color || 'from-slate-700 to-slate-900'} transition-colors duration-700`;
+                hero.style.backgroundImage = g.coverUrl ? `url(${g.coverUrl})` : '';
+                hero.style.backgroundSize = g.coverUrl ? 'cover' : '';
+                hero.style.backgroundPosition = g.coverUrl ? 'center' : '';
                 
                 updateDetailFavButton(g);
                 document.getElementById('view-Library').classList.add('hidden');
@@ -1089,7 +1159,7 @@
         document.getElementById('ai-pick-btn').addEventListener('click', async () => {
             openModal();
             document.getElementById('ai-text').innerText = "AI 正在挑选...";
-            const titles = games.map(g=>g.title).join(",");
+            const titles = allGames.map(g=>g.title).join(",");
             const res = await callAI(`从这些游戏中选一个适合现在玩的: ${titles}。返回游戏名和理由。`);
             document.getElementById('ai-text').innerText = res;
         });
@@ -1097,8 +1167,7 @@
         // Init
         loadAIConfig();
         loadSettings();
-        renderSidebarGameList();
-        renderLibraryGrid('all');
+        initGames();
         renderPresets();
         if(window.lucide) lucide.createIcons();
 
