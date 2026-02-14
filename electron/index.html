@@ -432,7 +432,7 @@
                     <div class="glass-panel p-5">
                         <div class="flex items-center justify-between mb-3">
                             <h2 class="text-xl font-bold">好友动态</h2>
-                            <div class="text-xs text-slate-500">本地动态 · 自动保存</div>
+                            <div class="flex items-center gap-2"><button id="community-steam-refresh-btn" class="px-3 py-1 text-xs rounded-full bg-white/70 border border-white/60 hover:bg-white">刷新 Steam 动态</button><div id="community-steam-status" class="text-xs text-slate-500">Steam API 未同步</div></div>
                         </div>
                         <textarea id="community-post-input" rows="3" maxlength="300" class="w-full px-4 py-3 rounded-xl border border-white/50 bg-white/70 theme-ring" placeholder="分享你今天的战绩、截图或游戏心情..."></textarea>
                         <div class="flex items-center justify-between mt-3">
@@ -440,6 +440,7 @@
                             <button id="community-post-btn" class="px-4 py-2 text-sm text-white rounded-lg transition-colors theme-bg theme-hover">发布动态</button>
                         </div>
                     </div>
+                    <div id="community-steam-feed" class="space-y-3"></div>
                     <div id="community-feed" class="space-y-4"></div>
                 </div>
                 <div class="w-80 flex-shrink-0">
@@ -1192,6 +1193,13 @@
                                 </div>
                             </div>
                             <div>
+                                <label class="text-sm text-slate-600">工作目录（推荐设置为游戏安装目录）</label>
+                                <div class="flex gap-2 mt-1">
+                                    <input id="game-working-dir-input" class="flex-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="D:/Games/MyGame" />
+                                    <button id="pick-working-dir-btn" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm">选择</button>
+                                </div>
+                            </div>
+                            <div>
                                 <label class="text-sm text-slate-600">启动参数（可选）</label>
                                 <input id="game-args-input" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="--fullscreen --lang=zh" />
                             </div>
@@ -1232,12 +1240,14 @@
             const modal = document.getElementById('game-form-modal');
             const titleInput = document.getElementById('game-name-input');
             const execInput = document.getElementById('game-exec-input');
+            const workingDirInput = document.getElementById('game-working-dir-input');
             const argsInput = document.getElementById('game-args-input');
             const coverInput = document.getElementById('game-cover-input');
             const landscapeCoverInput = document.getElementById('game-landscape-cover-input');
             document.getElementById('game-form-title').innerText = mode === 'add' ? '添加游戏' : '编辑游戏设置';
             titleInput.value = game?.title || '';
             execInput.value = game?.execPath || '';
+            workingDirInput.value = game?.workingDir || '';
             argsInput.value = Array.isArray(game?.args) ? game.args.join(' ') : (game?.args || '');
             coverInput.value = game?.coverUrl || '';
             landscapeCoverInput.value = game?.landscapeCoverUrl || '';
@@ -1246,7 +1256,17 @@
             document.getElementById('pick-exec-btn').onclick = async () => {
                 if (!electronAPI) return;
                 const p = await electronAPI.pickExecutable();
-                if (p) execInput.value = p;
+                if (p) {
+                    execInput.value = p;
+                    if (!workingDirInput.value.trim()) {
+                        workingDirInput.value = p.replace(/[\\/][^\\/]+$/, '');
+                    }
+                }
+            };
+            document.getElementById('pick-working-dir-btn').onclick = async () => {
+                if (!electronAPI?.pickDirectory) return;
+                const p = await electronAPI.pickDirectory();
+                if (p) workingDirInput.value = p;
             };
             document.getElementById('pick-cover-btn').onclick = async () => {
                 if (!electronAPI?.pickCoverFile) return;
@@ -1276,6 +1296,7 @@
                     title: titleInput.value.trim(),
                     execPath: execInput.value.trim(),
                     args: parseArgsInput(argsInput.value),
+                    workingDir: workingDirInput.value.trim(),
                     coverUrl: coverInput.value.trim() || DEFAULT_PORTRAIT_COVER,
                     landscapeCoverUrl: landscapeCoverInput.value.trim() || DEFAULT_LANDSCAPE_COVER,
                 };
@@ -1300,7 +1321,7 @@
                     }
                 } else {
                     if (mode === 'add') {
-                        allGames.push({ id: Date.now(), ...payload, coverUrl: payload.coverUrl || DEFAULT_PORTRAIT_COVER, landscapeCoverUrl: payload.landscapeCoverUrl || DEFAULT_LANDSCAPE_COVER, isFav: false, isRecent: false, hours: 0, lastPlayed: '未运行', color: 'from-slate-700 via-slate-600 to-slate-900' });
+                        allGames.push({ id: Date.now(), ...payload, workingDir: payload.workingDir || payload.execPath.replace(/[\\/][^\\/]+$/, ''), coverUrl: payload.coverUrl || DEFAULT_PORTRAIT_COVER, landscapeCoverUrl: payload.landscapeCoverUrl || DEFAULT_LANDSCAPE_COVER, isFav: false, isRecent: false, hours: 0, lastPlayed: '未运行', color: 'from-slate-700 via-slate-600 to-slate-900' });
                     } else {
                         allGames = allGames.map(g => g.id === game.id ? { ...g, ...payload } : g);
                     }
@@ -1393,6 +1414,7 @@
         let communityPosts = [];
         let communityFriends = [];
         let communityFriendFilter = 'all';
+        let steamCommunityFeed = [];
 
         function loadCommunityState() {
             communityPosts = JSON.parse(localStorage.getItem('steam_community_posts') || 'null') || [...defaultCommunityPosts];
@@ -1401,6 +1423,58 @@
 
         function saveCommunityPosts() {
             localStorage.setItem('steam_community_posts', JSON.stringify(communityPosts));
+        }
+
+        function stripHtml(input) {
+            return String(input || '').replace(/<[^>]*>/g, '').trim();
+        }
+
+        function renderSteamCommunityFeed() {
+            const container = document.getElementById('community-steam-feed');
+            const status = document.getElementById('community-steam-status');
+            if (!container) return;
+            if (!steamCommunityFeed.length) {
+                container.innerHTML = '<div class="glass-panel p-4 text-sm text-slate-500">暂未获取到 Steam 社区动态，点击“刷新 Steam 动态”重试。</div>';
+                if (status && status.textContent.includes('同步中')) status.textContent = 'Steam API 暂无数据';
+                return;
+            }
+
+            container.innerHTML = steamCommunityFeed.map((entry) => {
+                const news = entry.news?.[0];
+                const excerpt = stripHtml(news?.excerpt).slice(0, 120);
+                return `
+                    <article class="glass-panel p-4 border border-blue-100/60">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="font-semibold text-slate-800">${entry.title} <span class="text-xs text-slate-500">(AppID: ${entry.appId})</span></div>
+                            <div class="text-xs text-blue-600">${entry.currentPlayers != null ? `在线 ${entry.currentPlayers}` : '在线人数需 Steam Key'}</div>
+                        </div>
+                        ${news ? `<a href="${news.url}" target="_blank" rel="noreferrer" class="font-medium theme-text hover:underline">${news.title}</a>
+                        <p class="text-xs text-slate-600 mt-1">${excerpt || '暂无摘要'}</p>` : '<div class="text-xs text-slate-500">暂无社区新闻</div>'}
+                    </article>
+                `;
+            }).join('');
+
+            if (status) status.textContent = `Steam API 已同步 ${steamCommunityFeed.length} 款游戏`;
+        }
+
+        async function refreshSteamCommunityFeed() {
+            const status = document.getElementById('community-steam-status');
+            if (status) status.textContent = 'Steam API 同步中...';
+
+            try {
+                if (!electronAPI?.getSteamCommunityFeed) {
+                    if (status) status.textContent = '当前环境不支持 Steam API';
+                    return;
+                }
+                const key = getSteamApiKey();
+                const titles = allGames.map((g) => g.title).filter(Boolean);
+                steamCommunityFeed = await electronAPI.getSteamCommunityFeed(titles, key);
+                renderSteamCommunityFeed();
+            } catch {
+                if (status) status.textContent = 'Steam API 同步失败';
+                steamCommunityFeed = [];
+                renderSteamCommunityFeed();
+            }
         }
 
         function renderCommunityFeed() {
@@ -1470,6 +1544,7 @@
             renderCommunityFeed();
             renderCommunityFriends();
             renderCommunityTrending();
+            renderSteamCommunityFeed();
 
             const postInput = document.getElementById('community-post-input');
             const postBtn = document.getElementById('community-post-btn');
@@ -1479,6 +1554,8 @@
                     postStatus.textContent = `${postInput.value.length}/300`;
                 });
             }
+            document.getElementById('community-steam-refresh-btn')?.addEventListener('click', refreshSteamCommunityFeed);
+
             postBtn?.addEventListener('click', () => {
                 const content = postInput?.value.trim();
                 if (!content) {
@@ -1512,6 +1589,8 @@
                     renderCommunityFriends();
                 });
             });
+
+            refreshSteamCommunityFeed();
         }
 
 // --- NAVIGATION & TABS ---
