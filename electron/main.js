@@ -26,8 +26,16 @@ function writeGames(games) {
 }
 
 function normalizeArgs(args) {
-  if (Array.isArray(args)) return args;
-  if (typeof args === 'string') return args.split(' ').map((s) => s.trim()).filter(Boolean);
+  if (Array.isArray(args)) return args.map((item) => String(item).trim()).filter(Boolean);
+  if (typeof args === 'string') {
+    const tokens = [];
+    const regex = /"([^"]*)"|'([^']*)'|(\S+)/g;
+    let match;
+    while ((match = regex.exec(args)) !== null) {
+      tokens.push((match[1] ?? match[2] ?? match[3] ?? '').trim());
+    }
+    return tokens.filter(Boolean);
+  }
   return [];
 }
 
@@ -41,8 +49,8 @@ function normalizeWorkingDir(workingDir, execPath) {
 function withDefaults(game) {
   return {
     id: game.id || Date.now(),
-    title: String(game.title || '').trim(),
     englishTitle: String(game.englishTitle || '').trim(),
+    title: String(game.title || game.englishTitle || '').trim(),
     execPath: String(game.execPath || '').trim(),
     args: normalizeArgs(game.args),
     workingDir: normalizeWorkingDir(game.workingDir, game.execPath),
@@ -65,6 +73,30 @@ function isUriLaunchPath(execPath) {
   return /^steam:\/\//i.test(execPath) || /^https?:\/\//i.test(execPath);
 }
 
+function splitLaunchTarget(target = '') {
+  const value = String(target || '').trim();
+  if (!value) return { execPath: '', args: [] };
+
+  const quoteMatch = value.match(/^"([^"]+)"\s*(.*)$/);
+  if (quoteMatch) {
+    const [, execPath, rest] = quoteMatch;
+    return { execPath: execPath.trim(), args: normalizeArgs(rest) };
+  }
+
+  const steamUriMatch = value.match(/^(steam:\/\/\S+)\s*(.*)$/i);
+  if (steamUriMatch) {
+    return { execPath: steamUriMatch[1].trim(), args: normalizeArgs(steamUriMatch[2]) };
+  }
+
+  const exeMatch = value.match(/^(.+?\.(?:exe|bat|cmd|lnk|url|app|sh))\s*(.*)$/i);
+  if (exeMatch) {
+    return { execPath: exeMatch[1].trim(), args: normalizeArgs(exeMatch[2]) };
+  }
+
+  const [first, ...rest] = normalizeArgs(value);
+  return { execPath: first || '', args: rest };
+}
+
 function openUri(uri, workingDir = '') {
   if (process.platform === 'win32') {
     const commandArgs = ['/c', 'start', ''];
@@ -83,14 +115,29 @@ function openUri(uri, workingDir = '') {
   child.unref();
 }
 
+function parseAppIdFromText(text = '') {
+  const input = String(text || '').trim();
+  if (!input) return null;
+  const uriMatch = input.match(/steam:\/\/rungameid\/(\d+)/i);
+  if (uriMatch?.[1]) return Number(uriMatch[1]);
+  if (/^\d{3,}$/.test(input)) return Number(input);
+  return null;
+}
+
 function buildSearchTerms(title, englishTitle = '') {
-  return [title, englishTitle]
+  return [englishTitle, title]
     .map((term) => String(term || '').trim())
     .filter(Boolean);
 }
 
 async function resolveSteamAppByTitle(title, englishTitle = '') {
   const terms = buildSearchTerms(title, englishTitle);
+
+  for (const term of terms) {
+    const appIdFromTerm = parseAppIdFromText(term);
+    if (appIdFromTerm) return { appId: appIdFromTerm, matchedTerm: term };
+  }
+
   for (const term of terms) {
     try {
       const url = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(term)}&l=schinese&cc=CN`;
@@ -104,11 +151,12 @@ async function resolveSteamAppByTitle(title, englishTitle = '') {
 }
 
 async function fetchCover(title, englishTitle = '') {
-  const fallback = { portrait: DEFAULT_PORTRAIT_COVER, landscape: DEFAULT_LANDSCAPE_COVER };
+  const fallback = { appId: null, portrait: DEFAULT_PORTRAIT_COVER, landscape: DEFAULT_LANDSCAPE_COVER };
   try {
     const { appId } = await resolveSteamAppByTitle(title, englishTitle);
     if (appId) {
       return {
+        appId,
         portrait: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
         landscape: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
       };
@@ -122,7 +170,7 @@ async function fetchCover(title, englishTitle = '') {
       const item = (iJson.results || []).find(Boolean);
       if (item?.artworkUrl512 || item?.artworkUrl100) {
         const portrait = item.artworkUrl512 || item.artworkUrl100.replace('100x100bb', '512x512bb');
-        return { portrait, landscape: DEFAULT_LANDSCAPE_COVER };
+        return { appId: null, portrait, landscape: DEFAULT_LANDSCAPE_COVER };
       }
     }
   } catch {}
@@ -139,7 +187,6 @@ async function getSteamGameInfo(title, englishTitle, apiKey) {
       title,
       message: '未在 Steam 上匹配到该游戏。',
       steamdbUrl: `https://steamdb.info/search/?a=app&q=${encodeURIComponent(q)}`,
-      xiaoheiheUrl: `https://www.xiaoheihe.cn/app/search?key=${encodeURIComponent(q)}`,
     };
   }
 
@@ -171,7 +218,6 @@ async function getSteamGameInfo(title, englishTitle, apiKey) {
     currentPlayers,
     steamUrl: `https://store.steampowered.com/app/${appId}/`,
     steamdbUrl: `https://steamdb.info/app/${appId}/`,
-    xiaoheiheUrl: `https://www.xiaoheihe.cn/app/search?key=${encodeURIComponent(appData?.name || title)}`,
   };
 }
 
@@ -309,7 +355,7 @@ function createTray() {
 ipcMain.handle('games:get', () => readGames());
 ipcMain.handle('games:add', (_, game) => {
   const payload = withDefaults(game);
-  if (!payload.title) return { ok: false, error: '游戏名称不能为空' };
+  if (!payload.title && !payload.englishTitle) return { ok: false, error: '中文名和英文名至少填写一个' };
   if (!payload.execPath) return { ok: false, error: '启动路径不能为空' };
   const games = readGames();
   const next = [...games, payload];
@@ -370,19 +416,22 @@ ipcMain.handle('games:launch', (_, id) => {
   if (!game) return { ok: false, error: '游戏不存在' };
 
   try {
-    const workingDir = normalizeWorkingDir(game.workingDir, game.execPath);
+    const parsed = splitLaunchTarget(game.execPath);
+    const execPath = parsed.execPath;
+    const mergedArgs = [...parsed.args, ...normalizeArgs(game.args)];
+    const workingDir = normalizeWorkingDir(game.workingDir, execPath);
     if (workingDir && !fs.existsSync(workingDir)) return { ok: false, error: '工作目录不存在' };
 
-    if (isUriLaunchPath(game.execPath)) {
-      openUri(game.execPath, workingDir);
+    if (isUriLaunchPath(execPath)) {
+      openUri(execPath, workingDir);
     } else {
-      if (!game.execPath || !fs.existsSync(game.execPath)) return { ok: false, error: '游戏路径不存在' };
-      const ext = path.extname(game.execPath).toLowerCase();
+      if (!execPath || !fs.existsSync(execPath)) return { ok: false, error: '游戏路径不存在' };
+      const ext = path.extname(execPath).toLowerCase();
       if (process.platform === 'win32' && ['.lnk', '.url'].includes(ext)) {
-        openUri(game.execPath, workingDir);
+        openUri(execPath, workingDir);
       } else {
-        const child = spawn(game.execPath, game.args || [], {
-          cwd: workingDir || path.dirname(game.execPath),
+        const child = spawn(execPath, mergedArgs || [], {
+          cwd: workingDir || path.dirname(execPath),
           detached: true,
           stdio: 'ignore',
           shell: process.platform === 'win32' && ['.bat', '.cmd'].includes(ext),
