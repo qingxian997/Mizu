@@ -31,6 +31,82 @@ function normalizeArgs(args) {
   return [];
 }
 
+function splitCommandLine(input) {
+  const source = String(input || '').trim();
+  if (!source) return [];
+  const tokens = [];
+  let current = '';
+  let quote = null;
+
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i];
+    if ((ch === '"' || ch === "'") && source[i - 1] !== '\\') {
+      if (!quote) {
+        quote = ch;
+        continue;
+      }
+      if (quote === ch) {
+        quote = null;
+        continue;
+      }
+    }
+
+    if (!quote && /\s/.test(ch)) {
+      if (current) {
+        tokens.push(current);
+        current = '';
+      }
+      continue;
+    }
+
+    current += ch;
+  }
+
+  if (current) tokens.push(current);
+  return tokens;
+}
+
+function getAppIdFromValue(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const direct = raw.match(/^\d+$/);
+  if (direct) return direct[0];
+  const steamUri = raw.match(/^steam:\/\/rungameid\/(\d+)/i);
+  if (steamUri) return steamUri[1];
+  const appStoreUrl = raw.match(/store\.steampowered\.com\/app\/(\d+)/i);
+  if (appStoreUrl) return appStoreUrl[1];
+  return '';
+}
+
+function normalizeExecPath(execPath, steamAppId = '') {
+  const trimmed = String(execPath || '').trim();
+  const appId = getAppIdFromValue(steamAppId) || getAppIdFromValue(trimmed);
+  if (appId) return `steam://rungameid/${appId}`;
+  return trimmed;
+}
+
+function resolveLaunchCommand(game) {
+  const execPath = normalizeExecPath(game.execPath, game.steamAppId);
+  if (isUriLaunchPath(execPath)) {
+    return { execPath, args: [] };
+  }
+
+  const normalizedArgs = normalizeArgs(game.args);
+  if (normalizedArgs.length > 0) {
+    return { execPath, args: normalizedArgs };
+  }
+
+  const parts = splitCommandLine(execPath);
+  if (parts.length <= 1) {
+    return { execPath, args: normalizedArgs };
+  }
+
+  return {
+    execPath: parts[0],
+    args: parts.slice(1),
+  };
+}
+
 function normalizeWorkingDir(workingDir, execPath) {
   const preferred = String(workingDir || '').trim();
   if (preferred) return preferred;
@@ -39,12 +115,16 @@ function normalizeWorkingDir(workingDir, execPath) {
 }
 
 function withDefaults(game) {
+  const steamAppId = getAppIdFromValue(game.steamAppId || game.execPath);
+  const normalizedExecPath = normalizeExecPath(game.execPath, steamAppId);
   return {
     id: game.id || Date.now(),
     title: String(game.title || '').trim(),
-    execPath: String(game.execPath || '').trim(),
+    titleEn: String(game.titleEn || '').trim(),
+    steamAppId,
+    execPath: normalizedExecPath,
     args: normalizeArgs(game.args),
-    workingDir: normalizeWorkingDir(game.workingDir, game.execPath),
+    workingDir: normalizeWorkingDir(game.workingDir, normalizedExecPath),
     coverUrl: String(game.coverUrl || '').trim(),
     landscapeCoverUrl: String(game.landscapeCoverUrl || '').trim(),
     color: game.color || 'from-slate-700 via-slate-600 to-slate-900',
@@ -93,10 +173,29 @@ async function resolveSteamAppIdByTitle(title) {
   }
 }
 
-async function fetchCover(title) {
+async function resolveSteamAppId(game = {}) {
+  const byPayload = getAppIdFromValue(game.steamAppId || game.execPath);
+  if (byPayload) return byPayload;
+
+  const englishTitle = String(game.titleEn || '').trim();
+  if (englishTitle) {
+    const appId = await resolveSteamAppIdByTitle(englishTitle);
+    if (appId) return String(appId);
+  }
+
+  const chineseTitle = String(game.title || '').trim();
+  if (chineseTitle) {
+    const appId = await resolveSteamAppIdByTitle(chineseTitle);
+    if (appId) return String(appId);
+  }
+
+  return '';
+}
+
+async function fetchCover(game = {}) {
   const fallback = { portrait: DEFAULT_PORTRAIT_COVER, landscape: DEFAULT_LANDSCAPE_COVER };
   try {
-    const appId = await resolveSteamAppIdByTitle(title);
+    const appId = await resolveSteamAppId(game);
     if (appId) {
       return {
         portrait: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
@@ -106,6 +205,7 @@ async function fetchCover(title) {
   } catch {}
 
   try {
+    const title = game.titleEn || game.title || '';
     const itunes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(title)}&entity=software&limit=5`);
     const iJson = await itunes.json();
     const item = (iJson.results || []).find(Boolean);
@@ -118,15 +218,15 @@ async function fetchCover(title) {
   return fallback;
 }
 
-async function getSteamGameInfo(title, apiKey) {
-  const appId = await resolveSteamAppIdByTitle(title);
+async function getSteamGameInfo(game, apiKey) {
+  const appId = await resolveSteamAppId(game);
+  const title = String(game?.title || game?.titleEn || '').trim();
   if (!appId) {
     return {
       found: false,
       title,
       message: '未在 Steam 上匹配到该游戏。',
       steamdbUrl: `https://steamdb.info/search/?a=app&q=${encodeURIComponent(title)}`,
-      xiaoheiheUrl: `https://www.xiaoheihe.cn/app/search?key=${encodeURIComponent(title)}`,
     };
   }
 
@@ -146,6 +246,18 @@ async function getSteamGameInfo(title, apiKey) {
     } catch {}
   }
 
+  let achievementTotal = null;
+  try {
+    achievementTotal = appData?.achievements?.total ?? null;
+  } catch {}
+
+  let news = [];
+  try {
+    const newsRes = await fetch(`https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=${appId}&count=3&maxlength=220&format=json`);
+    const newsJson = await newsRes.json();
+    news = newsJson?.appnews?.newsitems || [];
+  } catch {}
+
   return {
     found: true,
     appId,
@@ -155,20 +267,22 @@ async function getSteamGameInfo(title, apiKey) {
     genres: (appData?.genres || []).map((g) => g.description).slice(0, 4),
     price: appData?.price_overview?.final_formatted || '价格信息暂不可用',
     currentPlayers,
+    achievementTotal,
+    news,
     steamUrl: `https://store.steampowered.com/app/${appId}/`,
     steamdbUrl: `https://steamdb.info/app/${appId}/`,
-    xiaoheiheUrl: `https://www.xiaoheihe.cn/app/search?key=${encodeURIComponent(appData?.name || title)}`,
   };
 }
 
-async function getSteamCommunityFeed(titles, apiKey) {
-  const normalizedTitles = Array.isArray(titles) ? titles.map((t) => String(t || '').trim()).filter(Boolean).slice(0, 6) : [];
+async function getSteamCommunityFeed(games, apiKey) {
+  const normalizedGames = Array.isArray(games) ? games.slice(0, 6) : [];
   const entries = [];
 
-  for (const title of normalizedTitles) {
+  for (const game of normalizedGames) {
     try {
-      const appId = await resolveSteamAppIdByTitle(title);
+      const appId = await resolveSteamAppId(game);
       if (!appId) continue;
+      const title = String(game.title || game.titleEn || '').trim() || `App ${appId}`;
 
       let newsItems = [];
       try {
@@ -264,7 +378,7 @@ function createTray() {
 ipcMain.handle('games:get', () => readGames());
 ipcMain.handle('games:add', (_, game) => {
   const payload = withDefaults(game);
-  if (!payload.title) return { ok: false, error: '游戏名称不能为空' };
+  if (!payload.title && !payload.titleEn) return { ok: false, error: '中文名和英文名至少填写一个' };
   if (!payload.execPath) return { ok: false, error: '启动路径不能为空' };
   const games = readGames();
   const next = [...games, payload];
@@ -276,7 +390,7 @@ ipcMain.handle('games:update', (_, id, patch) => {
   let updated = null;
   const next = games.map((g) => {
     if (g.id !== id) return g;
-    updated = { ...g, ...patch, args: normalizeArgs(patch.args ?? g.args), workingDir: normalizeWorkingDir(patch.workingDir ?? g.workingDir, patch.execPath ?? g.execPath) };
+    updated = withDefaults({ ...g, ...patch, args: normalizeArgs(patch.args ?? g.args), workingDir: normalizeWorkingDir(patch.workingDir ?? g.workingDir, patch.execPath ?? g.execPath) });
     return updated;
   });
   writeGames(next);
@@ -317,26 +431,27 @@ ipcMain.handle('games:pickCoverFile', async () => {
   return toFileUrl(result.filePaths[0]);
 });
 ipcMain.handle('games:fetchCover', (_, title) => fetchCover(title));
-ipcMain.handle('steam:getGameInfo', (_, title, apiKey) => getSteamGameInfo(title, apiKey));
-ipcMain.handle('steam:getCommunityFeed', (_, titles, apiKey) => getSteamCommunityFeed(titles, apiKey));
+ipcMain.handle('steam:getGameInfo', (_, game, apiKey) => getSteamGameInfo(game, apiKey));
+ipcMain.handle('steam:getCommunityFeed', (_, games, apiKey) => getSteamCommunityFeed(games, apiKey));
 ipcMain.handle('games:launch', (_, id) => {
   const game = readGames().find((g) => g.id === id);
   if (!game) return { ok: false, error: '游戏不存在' };
 
   try {
-    const workingDir = normalizeWorkingDir(game.workingDir, game.execPath);
+    const launch = resolveLaunchCommand(game);
+    const workingDir = normalizeWorkingDir(game.workingDir, launch.execPath);
     if (workingDir && !fs.existsSync(workingDir)) return { ok: false, error: '工作目录不存在' };
 
-    if (isUriLaunchPath(game.execPath)) {
-      openUri(game.execPath, workingDir);
+    if (isUriLaunchPath(launch.execPath)) {
+      openUri(launch.execPath, workingDir);
     } else {
-      if (!game.execPath || !fs.existsSync(game.execPath)) return { ok: false, error: '游戏路径不存在' };
-      const ext = path.extname(game.execPath).toLowerCase();
+      if (!launch.execPath || !fs.existsSync(launch.execPath)) return { ok: false, error: '游戏路径不存在' };
+      const ext = path.extname(launch.execPath).toLowerCase();
       if (process.platform === 'win32' && ['.lnk', '.url'].includes(ext)) {
-        openUri(game.execPath, workingDir);
+        openUri(launch.execPath, workingDir);
       } else {
-        const child = spawn(game.execPath, game.args || [], {
-          cwd: workingDir || path.dirname(game.execPath),
+        const child = spawn(launch.execPath, launch.args || [], {
+          cwd: workingDir || path.dirname(launch.execPath),
           detached: true,
           stdio: 'ignore',
           shell: process.platform === 'win32' && ['.bat', '.cmd'].includes(ext),

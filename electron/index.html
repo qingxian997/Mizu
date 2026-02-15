@@ -951,16 +951,14 @@
         }
 
         // --- 5. GAME & UI LOGIC ---
-        const defaultGames = [
-            { id: 1, title: "艾尔登法环", color: "from-amber-900 via-yellow-700 to-amber-900", icon: "ring", hours: 128, lastPlayed: "昨天", isRecent: true, isFav: true },
-            { id: 2, title: "赛博朋克 2077", color: "from-yellow-400 via-yellow-300 to-yellow-500", icon: "cpu", hours: 64, lastPlayed: "3天前", isRecent: true, isFav: false },
-        ];
+        const defaultGames = [];
 
         const electronAPI = window.electronAPI || null;
         let allGames = [];
         let currentLibraryFilter = 'all';
         let isGridView = true;
         let currentGameForAI = null;
+        const launchingGameIds = new Set();
 
         function getGameStyle(game) {
             if (game.coverUrl) return `background-image:url('${game.coverUrl}');background-size:cover;background-position:center;`;
@@ -989,11 +987,11 @@
 
             if (searchTerm) {
                 const term = searchTerm.toLowerCase();
-                filteredGames = filteredGames.filter(g => g.title.toLowerCase().includes(term));
+                filteredGames = filteredGames.filter(g => (g.title || '').toLowerCase().includes(term) || (g.titleEn || '').toLowerCase().includes(term));
             }
 
             if (filteredGames.length === 0) {
-                gridContainer.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-20 text-slate-400"><i data-lucide="ghost" class="w-16 h-16 mb-4 opacity-50"></i><p class="text-lg">没有找到游戏，点击右下角 + 添加游戏</p></div>`;
+                gridContainer.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-20 text-slate-400"><i data-lucide="ghost" class="w-16 h-16 mb-4 opacity-50"></i><p class="text-lg mb-3">没有找到游戏，点击下方按钮添加</p><button onclick="window.quickAddGame?.()" class="px-4 py-2 rounded-lg text-white theme-bg theme-hover">新建游戏</button></div>`;
                 gridContainer.style.gridTemplateColumns = '1fr';
                 if(window.lucide) lucide.createIcons();
                 return;
@@ -1010,7 +1008,7 @@
                         <button class="absolute top-3 right-3 z-30 p-2 rounded-full transition-all duration-200 ${game.isFav ? 'text-yellow-400 opacity-100' : 'text-white opacity-0 group-hover:opacity-100 hover:bg-black/20'}" onclick="event.stopPropagation(); window.toggleFavorite(${game.id});"><i data-lucide="star" class="w-5 h-5 ${game.isFav ? 'fill-current' : ''}"></i></button>
                         <div class="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-between p-4 z-20">
                             <div class="text-white/80 text-xs font-bold uppercase tracking-wider mb-2">${game.hours || 0}H</div>
-                            <button class="w-10 h-10 rounded-full bg-white text-slate-900 flex items-center justify-center shadow-lg hover:scale-110 transition-transform" onclick="event.stopPropagation(); window.launchGame(${game.id});"><i data-lucide="play" class="w-4 h-4 fill-current"></i></button>
+                            <button class="w-10 h-10 rounded-full bg-white text-slate-900 flex items-center justify-center shadow-lg hover:scale-110 transition-transform disabled:opacity-70" ${launchingGameIds.has(game.id) ? 'disabled' : ''} onclick="event.stopPropagation(); window.launchGame(${game.id});"><i data-lucide="${launchingGameIds.has(game.id) ? 'loader-circle' : 'play'}" class="w-4 h-4 ${launchingGameIds.has(game.id) ? 'animate-spin' : 'fill-current'}"></i></button>
                         </div>
                     </div>
                 </div>`).join('');
@@ -1027,7 +1025,7 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-4">
-                        <button class="p-2 bg-blue-50/50 text-blue-600 rounded-full hover:bg-blue-100 hover:scale-110 transition-all border border-blue-100" onclick="event.stopPropagation(); window.launchGame(${game.id});"><i data-lucide="play" class="w-5 h-5 fill-current"></i></button>
+                        <button class="p-2 bg-blue-50/50 text-blue-600 rounded-full hover:bg-blue-100 hover:scale-110 transition-all border border-blue-100 disabled:opacity-70" ${launchingGameIds.has(game.id) ? 'disabled' : ''} onclick="event.stopPropagation(); window.launchGame(${game.id});"><i data-lucide="${launchingGameIds.has(game.id) ? 'loader-circle' : 'play'}" class="w-5 h-5 ${launchingGameIds.has(game.id) ? 'animate-spin' : 'fill-current'}"></i></button>
                     </div>
                 </div>`).join('');
             }
@@ -1040,7 +1038,34 @@
         }
 
         function parseArgsInput(value = '') {
-            return value.split(' ').map(s => s.trim()).filter(Boolean);
+            const source = String(value || '').trim();
+            if (!source) return [];
+            const tokens = [];
+            let current = '';
+            let quote = null;
+            for (let i = 0; i < source.length; i += 1) {
+                const ch = source[i];
+                if ((ch === '"' || ch === "'") && source[i - 1] !== '\\') {
+                    if (!quote) { quote = ch; continue; }
+                    if (quote === ch) { quote = null; continue; }
+                }
+                if (!quote && /\s/.test(ch)) {
+                    if (current) { tokens.push(current); current = ''; }
+                    continue;
+                }
+                current += ch;
+            }
+            if (current) tokens.push(current);
+            return tokens;
+        }
+
+        function normalizeSteamLaunchPath(input = '') {
+            const value = String(input || '').trim();
+            if (!value) return '';
+            if (/^\d+$/.test(value)) return `steam://rungameid/${value}`;
+            const m = value.match(/store\.steampowered\.com\/app\/(\d+)/i);
+            if (m) return `steam://rungameid/${m[1]}`;
+            return value;
         }
 
         function getSteamApiKey() {
@@ -1076,7 +1101,10 @@
             panel.id = 'steam-detail-panel';
             panel.className = 'glass-panel p-6';
             panel.innerHTML = `
-                <h3 class="font-bold text-xl mb-4">Steam / SteamDB / 小黑盒</h3>
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-bold text-xl">Steam 情报</h3>
+                    <button id="steam-detail-refresh-btn" class="px-2 py-1 text-xs rounded-full bg-white/70 border border-white/60 hover:bg-white">刷新</button>
+                </div>
                 <div id="steam-detail-content" class="text-sm text-slate-600">请先打开一个游戏详情。</div>
             `;
             rightCol.appendChild(panel);
@@ -1093,13 +1121,13 @@
                     return;
                 }
                 const key = getSteamApiKey();
-                const info = await electronAPI.getSteamGameInfo(game.title, key);
+                const info = await electronAPI.getSteamGameInfo(game, key);
                 if (!info?.found) {
                     container.innerHTML = `
                         <div class="space-y-2">
                             <div class="text-slate-700">${info?.message || '未找到相关信息'}</div>
                             <a class="underline theme-text" href="${info?.steamdbUrl || '#'}" target="_blank" rel="noreferrer">在 SteamDB 搜索</a>
-                            <a class="underline theme-text block" href="${info?.xiaoheiheUrl || '#'}" target="_blank" rel="noreferrer">在小黑盒搜索</a>
+                            <div class="text-slate-700">Steam 成就：<span class="font-semibold">无</span></div>
                         </div>
                     `;
                     return;
@@ -1111,17 +1139,26 @@
                         <img src="${info.headerImage}" class="w-full rounded-lg border border-white/50" />
                         <div class="text-slate-600">${info.shortDescription}</div>
                         <div class="text-slate-700">价格：<span class="font-semibold">${info.price}</span></div>
-                        <div class="text-slate-700">当前在线：<span class="font-semibold">${info.currentPlayers ?? '未提供（请检查 Steam Key）'}</span></div>
+                        <div class="text-slate-700">当前在线：<span class="font-semibold">${info.currentPlayers ?? '无'}</span></div>
+                        <div class="text-slate-700">Steam 成就：<span class="font-semibold">${info.achievementTotal ?? '无'}</span></div>
                         <div class="text-slate-700">类型：${(info.genres || []).join(' / ') || '未知'}</div>
+                        <div class="text-slate-700">新闻：${info.news?.length ? '' : '无'}</div>
+                        <div class="space-y-1">${(info.news || []).slice(0, 2).map((item) => `<a class='block text-xs underline theme-text' href='${item.url}' target='_blank' rel='noreferrer'>${item.title}</a>`).join('')}</div>
                         <div class="flex flex-wrap gap-3 text-xs">
                             <a class="underline theme-text" href="${info.steamUrl}" target="_blank" rel="noreferrer">Steam 商店</a>
                             <a class="underline theme-text" href="${info.steamdbUrl}" target="_blank" rel="noreferrer">SteamDB</a>
-                            <a class="underline theme-text" href="${info.xiaoheiheUrl}" target="_blank" rel="noreferrer">小黑盒</a>
                         </div>
                     </div>
                 `;
             } catch (e) {
-                container.innerHTML = '获取 Steam 信息失败，请稍后重试。';
+                container.innerHTML = '获取 Steam 信息失败，请稍后重试。<br/>Steam 成就：无';
+            }
+
+            const refreshBtn = document.getElementById('steam-detail-refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.onclick = () => {
+                    if (currentGameForAI) loadSteamDetailInfo(currentGameForAI);
+                };
             }
         }
 
@@ -1136,18 +1173,34 @@
 
         window.launchGame = async (id) => {
             const game = allGames.find(g => g.id === id);
-            if (!game) return;
+            if (!game || launchingGameIds.has(id)) return;
             if (!electronAPI) {
                 alert('当前运行环境不是 Electron，无法启动本地游戏。');
                 return;
+            }
+            launchingGameIds.add(id);
+            refreshLibrary();
+            const detailLaunchBtn = document.getElementById('detail-launch-btn');
+            if (currentGameForAI?.id === id && detailLaunchBtn) {
+                detailLaunchBtn.disabled = true;
+                detailLaunchBtn.innerHTML = '<i data-lucide="loader-circle" class="w-6 h-6 animate-spin"></i><span>加载中...</span>';
+                if(window.lucide) lucide.createIcons();
             }
             const result = await electronAPI.launchGame(id);
             if (!result.ok) alert(`启动失败: ${result.error}`);
             else {
                 game.lastPlayed = '刚刚';
                 game.isRecent = true;
-                refreshLibrary();
             }
+            setTimeout(() => {
+                launchingGameIds.delete(id);
+                if (currentGameForAI?.id === id && detailLaunchBtn) {
+                    detailLaunchBtn.disabled = false;
+                    detailLaunchBtn.innerHTML = '<i data-lucide="play" class="w-6 h-6 fill-current"></i><span>启动游戏</span>';
+                    if(window.lucide) lucide.createIcons();
+                }
+                refreshLibrary();
+            }, 5000);
         };
 
         function updateDetailFavButton(game) {
@@ -1182,13 +1235,17 @@
                         </div>
                         <div class="space-y-4">
                             <div>
-                                <label class="text-sm text-slate-600">游戏名称</label>
+                                <label class="text-sm text-slate-600">游戏中文名（可选）</label>
                                 <input id="game-name-input" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="例如：黑神话：悟空" />
+                            </div>
+                            <div>
+                                <label class="text-sm text-slate-600">游戏英文名（可选）</label>
+                                <input id="game-name-en-input" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="e.g. Black Myth: Wukong" />
                             </div>
                             <div>
                                 <label class="text-sm text-slate-600">启动路径（快捷方式或可执行文件）</label>
                                 <div class="flex gap-2 mt-1">
-                                    <input id="game-exec-input" class="flex-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="D:/Games/game.exe" />
+                                    <input id="game-exec-input" class="flex-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="D:/switch/yuzu/yuzu.exe -f -g &quot;D:/switch/yuzu/games/cuphead.xci&quot; 或 steam://rungameid/570" />
                                     <button id="pick-exec-btn" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm">选择</button>
                                 </div>
                             </div>
@@ -1239,6 +1296,7 @@
             ensureGameFormModal();
             const modal = document.getElementById('game-form-modal');
             const titleInput = document.getElementById('game-name-input');
+            const titleEnInput = document.getElementById('game-name-en-input');
             const execInput = document.getElementById('game-exec-input');
             const workingDirInput = document.getElementById('game-working-dir-input');
             const argsInput = document.getElementById('game-args-input');
@@ -1246,12 +1304,17 @@
             const landscapeCoverInput = document.getElementById('game-landscape-cover-input');
             document.getElementById('game-form-title').innerText = mode === 'add' ? '添加游戏' : '编辑游戏设置';
             titleInput.value = game?.title || '';
+            titleEnInput.value = game?.titleEn || '';
             execInput.value = game?.execPath || '';
             workingDirInput.value = game?.workingDir || '';
             argsInput.value = Array.isArray(game?.args) ? game.args.join(' ') : (game?.args || '');
             coverInput.value = game?.coverUrl || '';
             landscapeCoverInput.value = game?.landscapeCoverUrl || '';
             modal.classList.remove('hidden');
+            setTimeout(() => titleInput.focus(), 30);
+            execInput.onblur = () => {
+                execInput.value = normalizeSteamLaunchPath(execInput.value.trim());
+            };
 
             document.getElementById('pick-exec-btn').onclick = async () => {
                 if (!electronAPI) return;
@@ -1279,9 +1342,13 @@
                 if (p) landscapeCoverInput.value = p;
             };
             document.getElementById('fetch-cover-btn').onclick = async () => {
-                const name = titleInput.value.trim();
-                if (!name || !electronAPI) return;
-                const cover = await electronAPI.fetchCover(name);
+                const payloadForCover = {
+                    title: titleInput.value.trim(),
+                    titleEn: titleEnInput.value.trim(),
+                    execPath: normalizeSteamLaunchPath(execInput.value.trim()),
+                };
+                if ((!payloadForCover.title && !payloadForCover.titleEn) || !electronAPI) return;
+                const cover = await electronAPI.fetchCover(payloadForCover);
                 if (typeof cover === 'string') {
                     coverInput.value = cover || DEFAULT_PORTRAIT_COVER;
                     landscapeCoverInput.value = cover || DEFAULT_LANDSCAPE_COVER;
@@ -1294,13 +1361,14 @@
             document.getElementById('game-form-save').onclick = async () => {
                 const payload = {
                     title: titleInput.value.trim(),
-                    execPath: execInput.value.trim(),
+                    titleEn: titleEnInput.value.trim(),
+                    execPath: normalizeSteamLaunchPath(execInput.value.trim()),
                     args: parseArgsInput(argsInput.value),
                     workingDir: workingDirInput.value.trim(),
                     coverUrl: coverInput.value.trim() || DEFAULT_PORTRAIT_COVER,
                     landscapeCoverUrl: landscapeCoverInput.value.trim() || DEFAULT_LANDSCAPE_COVER,
                 };
-                if (!payload.title) return alert('请填写游戏名称');
+                if (!payload.title && !payload.titleEn) return alert('中文名和英文名至少填写一个');
                 if (!payload.execPath) return alert('请填写启动路径');
 
                 if (electronAPI) {
@@ -1339,6 +1407,7 @@
         async function quickAddGame() {
             await openGameForm('add');
         }
+        window.quickAddGame = quickAddGame;
 
         async function editCurrentGame() {
             if (!currentGameForAI) return;
@@ -1362,7 +1431,6 @@
             if (electronAPI) {
                 allGames = await electronAPI.getGames();
             }
-            if (!allGames.length) allGames = [...defaultGames];
             refreshLibrary();
 
             const addBtn = document.createElement('button');
@@ -1398,6 +1466,9 @@
 
             ensureSteamApiSettingCard();
             ensureSteamDetailPanel();
+            document.getElementById('steam-detail-refresh-btn')?.addEventListener('click', () => {
+                if (currentGameForAI) loadSteamDetailInfo(currentGameForAI);
+            });
             if(window.lucide) lucide.createIcons();
         }
 
@@ -1467,8 +1538,8 @@
                     return;
                 }
                 const key = getSteamApiKey();
-                const titles = allGames.map((g) => g.title).filter(Boolean);
-                steamCommunityFeed = await electronAPI.getSteamCommunityFeed(titles, key);
+                const games = allGames.map((g) => ({ title: g.title, titleEn: g.titleEn, steamAppId: g.steamAppId, execPath: g.execPath })).filter((g) => g.title || g.titleEn || g.execPath);
+                steamCommunityFeed = await electronAPI.getSteamCommunityFeed(games, key);
                 renderSteamCommunityFeed();
             } catch {
                 if (status) status.textContent = 'Steam API 同步失败';
@@ -1679,7 +1750,7 @@
             const g = allGames.find(game => game.id === e.detail);
             if(g) {
                 currentGameForAI = g;
-                document.getElementById('detail-logo').innerText = g.title;
+                document.getElementById('detail-logo').innerText = g.title || g.titleEn || '未命名游戏';
                 document.getElementById('detail-hours').innerText = `${g.hours} 小时`;
                 document.getElementById('detail-last-played').innerText = `上次: ${g.lastPlayed}`;
                 const hero = document.getElementById('detail-hero-bg');
