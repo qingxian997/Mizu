@@ -7,6 +7,8 @@ const { pathToFileURL } = require('url');
 const DB_FILE = 'games.json';
 const DEFAULT_PORTRAIT_COVER = 'https://images.weserv.nl/?url=store.steampowered.com/public/shared/images/responsive/header_logo.png&w=600&h=900&fit=cover';
 const DEFAULT_LANDSCAPE_COVER = 'https://images.weserv.nl/?url=store.steampowered.com/public/shared/images/header/globalheader_logo.png&w=1280&h=720&fit=cover';
+const WIN_SHORTCUT_EXTENSIONS = new Set(['.lnk', '.url']);
+const WIN_SHELL_EXTENSIONS = new Set(['.bat', '.cmd']);
 
 function getDbPath() {
   return path.join(app.getPath('userData'), DB_FILE);
@@ -110,8 +112,7 @@ function resolveLaunchCommand(game) {
 function normalizeWorkingDir(workingDir, execPath) {
   const preferred = String(workingDir || '').trim();
   if (preferred) return preferred;
-  if (!execPath || isUriLaunchPath(execPath)) return '';
-  return path.dirname(execPath);
+  return '';
 }
 
 function withDefaults(game) {
@@ -163,14 +164,70 @@ function openUri(uri, workingDir = '') {
 }
 
 async function resolveSteamAppIdByTitle(title) {
-  try {
-    const url = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(title)}&l=schinese&cc=CN`;
+  const query = String(title || '').trim();
+  if (!query) return null;
+
+  const trySearch = async (lang = 'english') => {
+    const url = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(query)}&l=${encodeURIComponent(lang)}&cc=US`;
     const res = await fetch(url);
     const data = await res.json();
     return data?.items?.[0]?.id || null;
+  };
+
+  try {
+    const englishResult = await trySearch('english');
+    if (englishResult) return englishResult;
+  } catch {
+    // noop
+  }
+
+  try {
+    return await trySearch('schinese');
   } catch {
     return null;
   }
+}
+
+function stripHtml(input = '') {
+  return String(input || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+async function fetchCoverFromTheGamesDB(game = {}) {
+  const rawTitle = String(game.titleEn || game.title || '').trim();
+  if (!rawTitle) return null;
+
+  const endpoint = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://legacy.thegamesdb.net/api/GetGamesList.php?name=${encodeURIComponent(rawTitle)}`)}`;
+  const response = await fetch(endpoint);
+  const xmlText = await response.text();
+  if (!xmlText || !xmlText.includes('<baseImgUrl>')) return null;
+
+  const base = (xmlText.match(/<baseImgUrl>([^<]+)<\/baseImgUrl>/i)?.[1] || '').trim();
+  if (!base) return null;
+
+  const gameBlocks = [...xmlText.matchAll(/<Game>([\s\S]*?)<\/Game>/gi)].map((m) => m[1]);
+  if (!gameBlocks.length) return null;
+
+  const normalizedTarget = rawTitle.toLowerCase();
+  let bestBlock = gameBlocks[0];
+  for (const block of gameBlocks) {
+    const name = stripHtml(block.match(/<GameTitle>([\s\S]*?)<\/GameTitle>/i)?.[1] || '').toLowerCase();
+    if (name === normalizedTarget) {
+      bestBlock = block;
+      break;
+    }
+    if (name.includes(normalizedTarget)) bestBlock = block;
+  }
+
+  const thumb = (bestBlock.match(/<thumb>([^<]+)<\/thumb>/i)?.[1] || '').trim();
+  const fanart = (bestBlock.match(/<fanart>([^<]+)<\/fanart>/i)?.[1] || '').trim();
+  const portrait = thumb ? `${base}/${thumb.replace(/^\/+/, '')}` : '';
+  const landscape = fanart ? `${base}/${fanart.replace(/^\/+/, '')}` : portrait;
+  if (!portrait && !landscape) return null;
+
+  return {
+    portrait: portrait || landscape,
+    landscape: landscape || portrait,
+  };
 }
 
 async function resolveSteamAppId(game = {}) {
@@ -200,6 +257,16 @@ async function fetchCover(game = {}) {
       return {
         portrait: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
         landscape: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
+      };
+    }
+  } catch {}
+
+  try {
+    const gamesDbCover = await fetchCoverFromTheGamesDB(game);
+    if (gamesDbCover?.portrait || gamesDbCover?.landscape) {
+      return {
+        portrait: gamesDbCover.portrait || gamesDbCover.landscape,
+        landscape: gamesDbCover.landscape || gamesDbCover.portrait,
       };
     }
   } catch {}
@@ -443,7 +510,8 @@ ipcMain.handle('games:resolveSteamAppId', (_, game) => resolveSteamAppId(game));
 ipcMain.handle('steam:getGameInfo', (_, game, apiKey) => getSteamGameInfo(game, apiKey));
 ipcMain.handle('steam:getCommunityFeed', (_, games, apiKey) => getSteamCommunityFeed(games, apiKey));
 ipcMain.handle('games:launch', (_, id) => {
-  const game = readGames().find((g) => g.id === id);
+  const games = readGames();
+  const game = games.find((g) => g.id === id);
   if (!game) return { ok: false, error: '游戏不存在' };
 
   try {
@@ -456,21 +524,21 @@ ipcMain.handle('games:launch', (_, id) => {
     } else {
       if (!launch.execPath || !fs.existsSync(launch.execPath)) return { ok: false, error: '游戏路径不存在' };
       const ext = path.extname(launch.execPath).toLowerCase();
-      if (process.platform === 'win32' && ['.lnk', '.url'].includes(ext)) {
+      if (process.platform === 'win32' && WIN_SHORTCUT_EXTENSIONS.has(ext)) {
         openUri(launch.execPath, workingDir);
       } else {
         const child = spawn(launch.execPath, launch.args || [], {
           cwd: workingDir || path.dirname(launch.execPath),
           detached: true,
           stdio: 'ignore',
-          shell: process.platform === 'win32' && ['.bat', '.cmd'].includes(ext),
+          shell: process.platform === 'win32' && WIN_SHELL_EXTENSIONS.has(ext),
           windowsHide: true,
         });
         child.unref();
       }
     }
 
-    const next = readGames().map((g) => (g.id === id ? { ...g, lastPlayed: '刚刚', isRecent: true } : g));
+    const next = games.map((g) => (g.id === id ? { ...g, lastPlayed: '刚刚', isRecent: true } : g));
     writeGames(next);
     return { ok: true };
   } catch (error) {
