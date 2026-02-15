@@ -131,7 +131,7 @@ function withDefaults(game) {
     color: game.color || 'from-slate-700 via-slate-600 to-slate-900',
     icon: game.icon || 'gamepad-2',
     hours: Number(game.hours || 0),
-    lastPlayed: game.lastPlayed || 'æœªè¿è¡Œ',
+    lastPlayed: game.lastPlayed || 'Î´ÔËĞĞ',
     isRecent: Boolean(game.isRecent),
     isFav: Boolean(game.isFav),
   };
@@ -139,9 +139,9 @@ function withDefaults(game) {
 
 function formatLastPlayed(lastPlayedUnix) {
   const value = Number(lastPlayedUnix || 0);
-  if (!value) return 'æœªè¿è¡Œ';
+  if (!value) return 'Î´ÔËĞĞ';
   const date = new Date(value * 1000);
-  if (Number.isNaN(date.getTime())) return 'æœªè¿è¡Œ';
+  if (Number.isNaN(date.getTime())) return 'Î´ÔËĞĞ';
   return date.toISOString();
 }
 
@@ -306,7 +306,7 @@ async function getSteamGameInfo(game, apiKey, steamId) {
     return {
       found: false,
       title,
-      message: 'æœªåœ¨ Steam ä¸ŠåŒ¹é…åˆ°è¯¥æ¸¸æˆã€‚',
+      message: 'Î´ÔÚ Steam ÉÏÆ¥Åäµ½¸ÃÓÎÏ·¡£',
       steamdbUrl: `https://steamdb.info/search/?a=app&q=${encodeURIComponent(title)}`,
     };
   }
@@ -388,9 +388,9 @@ async function getSteamGameInfo(game, apiKey, steamId) {
     appId,
     title: appData?.name || title,
     headerImage: appData?.header_image || `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
-    shortDescription: appData?.short_description || 'æš‚æ— ç®€ä»‹ã€‚',
+    shortDescription: appData?.short_description || 'ÔİÎŞ¼ò½é¡£',
     genres: (appData?.genres || []).map((g) => g.description).slice(0, 4),
-    price: appData?.price_overview?.final_formatted || 'ä»·æ ¼ä¿¡æ¯æš‚ä¸å¯ç”¨',
+    price: appData?.price_overview?.final_formatted || '¼Û¸ñĞÅÏ¢Ôİ²»¿ÉÓÃ',
     currentPlayers,
     achievementTotal,
     playerAchievement,
@@ -467,9 +467,9 @@ async function getSteamCommunityFeed(games, apiKey, steamId) {
           currentPlayers: null,
           news: [{
             gid: `recent-${game.appid}`,
-            title: `ä½ æœ€è¿‘æ¸¸ç©äº† ${Math.round((game.playtime_2weeks || 0) / 60)} å°æ—¶`,
+            title: `Äã×î½üÓÎÍæÁË ${Math.round((game.playtime_2weeks || 0) / 60)} Ğ¡Ê±`,
             url: `https://store.steampowered.com/app/${game.appid}/`,
-            excerpt: `è¿‡å»ä¸¤å‘¨æ¸¸ç© ${Math.round((game.playtime_2weeks || 0) / 60)} å°æ—¶ï¼Œæ€»æ—¶é•¿ ${Math.round((game.playtime_forever || 0) / 60)} å°æ—¶ã€‚`,
+            excerpt: `¹ıÈ¥Á½ÖÜÓÎÍæ ${Math.round((game.playtime_2weeks || 0) / 60)} Ğ¡Ê±£¬×ÜÊ±³¤ ${Math.round((game.playtime_forever || 0) / 60)} Ğ¡Ê±¡£`,
             author: 'Steam',
             date: Math.floor(Date.now() / 1000),
             feedlabel: 'recent_playtime',
@@ -498,7 +498,7 @@ async function getSteamFriends(apiKey, steamId) {
         id: player.steamid,
         name: player.personaname,
         status,
-        game: player.gameextrainfo ? `åœ¨çº¿ Â· ${player.gameextrainfo}` : (status === 'online' ? 'åœ¨çº¿' : 'ç¦»çº¿'),
+        game: player.gameextrainfo ? `ÔÚÏß ¡¤ ${player.gameextrainfo}` : (status === 'online' ? 'ÔÚÏß' : 'ÀëÏß'),
         avatar: player.avatarmedium || player.avatarfull || '',
       };
     });
@@ -509,14 +509,14 @@ async function getSteamFriends(apiKey, steamId) {
 
 async function importSteamOwnedGames(apiKey, steamId) {
   if (!apiKey || !steamId) {
-    return { ok: false, error: 'è¯·å…ˆå¡«å†™ Steam API Key ä¸ SteamID64' };
+    return { ok: false, error: 'ÇëÏÈÌîĞ´ Steam API Key Óë SteamID64' };
   }
 
   try {
     const res = await fetch(`https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=${encodeURIComponent(apiKey)}&steamid=${encodeURIComponent(steamId)}&include_appinfo=1&include_played_free_games=1&format=json`);
     const payload = await res.json();
     const owned = payload?.response?.games || [];
-    if (!owned.length) return { ok: false, error: 'æœªè·å–åˆ°å¯å¯¼å…¥çš„ Steam æ¸¸æˆ' };
+    if (!owned.length) return { ok: false, error: 'Î´»ñÈ¡µ½¿Éµ¼ÈëµÄ Steam ÓÎÏ·' };
 
     const games = readGames();
     const byAppId = new Map(games.map((g) => [String(g.steamAppId || ''), g]));
@@ -550,7 +550,7 @@ async function importSteamOwnedGames(apiKey, steamId) {
           coverUrl: existing.coverUrl || basePayload.coverUrl,
           landscapeCoverUrl: existing.landscapeCoverUrl || basePayload.landscapeCoverUrl,
           hours: Math.max(Number(existing.hours || 0), Number(basePayload.hours || 0)),
-          lastPlayed: basePayload.lastPlayed === 'æœªè¿è¡Œ' ? existing.lastPlayed : basePayload.lastPlayed,
+          lastPlayed: basePayload.lastPlayed === 'Î´ÔËĞĞ' ? existing.lastPlayed : basePayload.lastPlayed,
           isRecent: existing.isRecent || basePayload.isRecent,
         });
         const index = games.findIndex((g) => g.id === existing.id);
@@ -565,7 +565,7 @@ async function importSteamOwnedGames(apiKey, steamId) {
     writeGames(games);
     return { ok: true, added, updated, total: games.length };
   } catch (error) {
-    return { ok: false, error: error.message || 'å¯¼å…¥å¤±è´¥' };
+    return { ok: false, error: error.message || 'µ¼ÈëÊ§°Ü' };
   }
 }
 
@@ -611,11 +611,11 @@ function hideToTray() {
 
 function createTray() {
   tray = new Tray(getTrayIcon());
-  tray.setToolTip('Steam æ¸¸æˆåº“');
+  tray.setToolTip('Steam ÓÎÏ·¿â');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'æ‰“å¼€ä¸»ç•Œé¢', click: showMainWindow },
+    { label: '´ò¿ªÖ÷½çÃæ', click: showMainWindow },
     {
-      label: 'é€€å‡º', click: () => {
+      label: 'ÍË³ö', click: () => {
         forceQuit = true;
         app.quit();
       },
@@ -627,8 +627,8 @@ function createTray() {
 ipcMain.handle('games:get', () => readGames());
 ipcMain.handle('games:add', (_, game) => {
   const payload = withDefaults(game);
-  if (!payload.title && !payload.titleEn) return { ok: false, error: 'ä¸­æ–‡åå’Œè‹±æ–‡åè‡³å°‘å¡«å†™ä¸€ä¸ª' };
-  if (!payload.execPath) return { ok: false, error: 'å¯åŠ¨è·¯å¾„ä¸èƒ½ä¸ºç©º' };
+  if (!payload.title && !payload.titleEn) return { ok: false, error: 'ÖĞÎÄÃûºÍÓ¢ÎÄÃûÖÁÉÙÌîĞ´Ò»¸ö' };
+  if (!payload.execPath) return { ok: false, error: 'Æô¶¯Â·¾¶²»ÄÜÎª¿Õ' };
   const games = readGames();
   const next = [...games, payload];
   writeGames(next);
@@ -661,8 +661,8 @@ ipcMain.handle('games:pickExecutable', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     filters: [
-      { name: 'åº”ç”¨ç¨‹åº', extensions: ['exe', 'bat', 'cmd', 'app', 'sh', 'lnk', 'url'] },
-      { name: 'æ‰€æœ‰æ–‡ä»¶', extensions: ['*'] },
+      { name: 'Ó¦ÓÃ³ÌĞò', extensions: ['exe', 'bat', 'cmd', 'app', 'sh', 'lnk', 'url'] },
+      { name: 'ËùÓĞÎÄ¼ş', extensions: ['*'] },
     ],
   });
   if (result.canceled || !result.filePaths.length) return '';
@@ -672,8 +672,8 @@ ipcMain.handle('games:pickCoverFile', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     filters: [
-      { name: 'å›¾ç‰‡', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] },
-      { name: 'æ‰€æœ‰æ–‡ä»¶', extensions: ['*'] },
+      { name: 'Í¼Æ¬', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] },
+      { name: 'ËùÓĞÎÄ¼ş', extensions: ['*'] },
     ],
   });
   if (result.canceled || !result.filePaths.length) return '';
@@ -690,17 +690,17 @@ ipcMain.handle('steam:importOwnedGames', (_, apiKey, steamId) => importSteamOwne
 ipcMain.handle('games:launch', (_, id) => {
   const games = readGames();
   const game = games.find((g) => g.id === id);
-  if (!game) return { ok: false, error: 'æ¸¸æˆä¸å­˜åœ¨' };
+  if (!game) return { ok: false, error: 'ÓÎÏ·²»´æÔÚ' };
 
   try {
     const launch = resolveLaunchCommand(game);
     const workingDir = normalizeWorkingDir(game.workingDir, launch.execPath);
-    if (workingDir && !fs.existsSync(workingDir)) return { ok: false, error: 'å·¥ä½œç›®å½•ä¸å­˜åœ¨' };
+    if (workingDir && !fs.existsSync(workingDir)) return { ok: false, error: '¹¤×÷Ä¿Â¼²»´æÔÚ' };
 
     if (isUriLaunchPath(launch.execPath)) {
       openUri(launch.execPath, workingDir);
     } else {
-      if (!launch.execPath || !fs.existsSync(launch.execPath)) return { ok: false, error: 'æ¸¸æˆè·¯å¾„ä¸å­˜åœ¨' };
+      if (!launch.execPath || !fs.existsSync(launch.execPath)) return { ok: false, error: 'ÓÎÏ·Â·¾¶²»´æÔÚ' };
       const ext = path.extname(launch.execPath).toLowerCase();
       if (process.platform === 'win32' && WIN_SHORTCUT_EXTENSIONS.has(ext)) {
         openUri(launch.execPath, workingDir);
@@ -721,7 +721,7 @@ ipcMain.handle('games:launch', (_, id) => {
     writeGames(next);
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: error.message || 'å¯åŠ¨å¤±è´¥' };
+    return { ok: false, error: error.message || 'Æô¶¯Ê§°Ü' };
   }
 });
 
