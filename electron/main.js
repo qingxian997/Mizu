@@ -42,6 +42,7 @@ function withDefaults(game) {
   return {
     id: game.id || Date.now(),
     title: String(game.title || '').trim(),
+    englishTitle: String(game.englishTitle || '').trim(),
     execPath: String(game.execPath || '').trim(),
     args: normalizeArgs(game.args),
     workingDir: normalizeWorkingDir(game.workingDir, game.execPath),
@@ -82,21 +83,30 @@ function openUri(uri, workingDir = '') {
   child.unref();
 }
 
-async function resolveSteamAppIdByTitle(title) {
-  try {
-    const url = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(title)}&l=schinese&cc=CN`;
-    const res = await fetch(url);
-    const data = await res.json();
-    return data?.items?.[0]?.id || null;
-  } catch {
-    return null;
-  }
+function buildSearchTerms(title, englishTitle = '') {
+  return [title, englishTitle]
+    .map((term) => String(term || '').trim())
+    .filter(Boolean);
 }
 
-async function fetchCover(title) {
+async function resolveSteamAppByTitle(title, englishTitle = '') {
+  const terms = buildSearchTerms(title, englishTitle);
+  for (const term of terms) {
+    try {
+      const url = `https://store.steampowered.com/api/storesearch?term=${encodeURIComponent(term)}&l=schinese&cc=CN`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const item = data?.items?.[0];
+      if (item?.id) return { appId: item.id, matchedTerm: term };
+    } catch {}
+  }
+  return { appId: null, matchedTerm: '' };
+}
+
+async function fetchCover(title, englishTitle = '') {
   const fallback = { portrait: DEFAULT_PORTRAIT_COVER, landscape: DEFAULT_LANDSCAPE_COVER };
   try {
-    const appId = await resolveSteamAppIdByTitle(title);
+    const { appId } = await resolveSteamAppByTitle(title, englishTitle);
     if (appId) {
       return {
         portrait: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
@@ -106,27 +116,30 @@ async function fetchCover(title) {
   } catch {}
 
   try {
-    const itunes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(title)}&entity=software&limit=5`);
-    const iJson = await itunes.json();
-    const item = (iJson.results || []).find(Boolean);
-    if (item?.artworkUrl512 || item?.artworkUrl100) {
-      const portrait = item.artworkUrl512 || item.artworkUrl100.replace('100x100bb', '512x512bb');
-      return { portrait, landscape: portrait };
+    for (const term of buildSearchTerms(title, englishTitle)) {
+      const itunes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=software&limit=5`);
+      const iJson = await itunes.json();
+      const item = (iJson.results || []).find(Boolean);
+      if (item?.artworkUrl512 || item?.artworkUrl100) {
+        const portrait = item.artworkUrl512 || item.artworkUrl100.replace('100x100bb', '512x512bb');
+        return { portrait, landscape: DEFAULT_LANDSCAPE_COVER };
+      }
     }
   } catch {}
 
   return fallback;
 }
 
-async function getSteamGameInfo(title, apiKey) {
-  const appId = await resolveSteamAppIdByTitle(title);
+async function getSteamGameInfo(title, englishTitle, apiKey) {
+  const { appId, matchedTerm } = await resolveSteamAppByTitle(title, englishTitle);
   if (!appId) {
+    const q = englishTitle || title;
     return {
       found: false,
       title,
       message: '未在 Steam 上匹配到该游戏。',
-      steamdbUrl: `https://steamdb.info/search/?a=app&q=${encodeURIComponent(title)}`,
-      xiaoheiheUrl: `https://www.xiaoheihe.cn/app/search?key=${encodeURIComponent(title)}`,
+      steamdbUrl: `https://steamdb.info/search/?a=app&q=${encodeURIComponent(q)}`,
+      xiaoheiheUrl: `https://www.xiaoheihe.cn/app/search?key=${encodeURIComponent(q)}`,
     };
   }
 
@@ -150,6 +163,7 @@ async function getSteamGameInfo(title, apiKey) {
     found: true,
     appId,
     title: appData?.name || title,
+    matchedTerm,
     headerImage: appData?.header_image || `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
     shortDescription: appData?.short_description || '暂无简介。',
     genres: (appData?.genres || []).map((g) => g.description).slice(0, 4),
@@ -161,13 +175,44 @@ async function getSteamGameInfo(title, apiKey) {
   };
 }
 
+async function getSteamGameMeta(appId) {
+  if (!appId) {
+    return { achievements: [], news: [] };
+  }
+
+  let achievements = [];
+  try {
+    const achRes = await fetch(`https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid=${appId}`);
+    const achJson = await achRes.json();
+    achievements = (achJson?.achievementpercentages?.achievements || []).slice(0, 6).map((item) => ({
+      name: item.name,
+      percent: item.percent,
+    }));
+  } catch {}
+
+  let news = [];
+  try {
+    const newsRes = await fetch(`https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=${appId}&count=4&maxlength=240&format=json`);
+    const newsJson = await newsRes.json();
+    news = (newsJson?.appnews?.newsitems || []).map((item) => ({
+      gid: item.gid,
+      title: item.title,
+      url: item.url,
+      date: item.date,
+      feedlabel: item.feedlabel,
+    }));
+  } catch {}
+
+  return { achievements, news };
+}
+
 async function getSteamCommunityFeed(titles, apiKey) {
   const normalizedTitles = Array.isArray(titles) ? titles.map((t) => String(t || '').trim()).filter(Boolean).slice(0, 6) : [];
   const entries = [];
 
   for (const title of normalizedTitles) {
     try {
-      const appId = await resolveSteamAppIdByTitle(title);
+      const { appId } = await resolveSteamAppByTitle(title);
       if (!appId) continue;
 
       let newsItems = [];
@@ -316,8 +361,9 @@ ipcMain.handle('games:pickCoverFile', async () => {
   if (result.canceled || !result.filePaths.length) return '';
   return toFileUrl(result.filePaths[0]);
 });
-ipcMain.handle('games:fetchCover', (_, title) => fetchCover(title));
-ipcMain.handle('steam:getGameInfo', (_, title, apiKey) => getSteamGameInfo(title, apiKey));
+ipcMain.handle('games:fetchCover', (_, title, englishTitle) => fetchCover(title, englishTitle));
+ipcMain.handle('steam:getGameInfo', (_, title, englishTitle, apiKey) => getSteamGameInfo(title, englishTitle, apiKey));
+ipcMain.handle('steam:getGameMeta', (_, appId) => getSteamGameMeta(appId));
 ipcMain.handle('steam:getCommunityFeed', (_, titles, apiKey) => getSteamCommunityFeed(titles, apiKey));
 ipcMain.handle('games:launch', (_, id) => {
   const game = readGames().find((g) => g.id === id);
