@@ -9,7 +9,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   pickExecutable: () => ipcRenderer.invoke('games:pickExecutable'),
   pickDirectory: () => ipcRenderer.invoke('games:pickDirectory'),
   pickCoverFile: () => ipcRenderer.invoke('games:pickCoverFile'),
-  fetchCover: (title) => ipcRenderer.invoke('games:fetchCover', title),
-  getSteamGameInfo: (title, apiKey) => ipcRenderer.invoke('steam:getGameInfo', title, apiKey),
+  fetchCover: (title, englishTitle) => ipcRenderer.invoke('games:fetchCover', title, englishTitle),
+  getSteamGameInfo: (title, englishTitle, apiKey) => ipcRenderer.invoke('steam:getGameInfo', title, englishTitle, apiKey),
+  getSteamGameMeta: (appId) => ipcRenderer.invoke('steam:getGameMeta', appId),
   getSteamCommunityFeed: (titles, apiKey) => ipcRenderer.invoke('steam:getCommunityFeed', titles, apiKey),
 });
