@@ -770,8 +770,9 @@
         function applyCoverTitleVisibility(visible) {
             const shouldShow = Boolean(visible);
             if (coverTitleToggle) coverTitleToggle.checked = shouldShow;
+            const changed = document.body.classList.contains('cover-title-hidden') === shouldShow;
             document.body.classList.toggle('cover-title-hidden', !shouldShow);
-            refreshLibrary();
+            if (changed) refreshLibrary();
         }
 
         function applyBackground(dataUrl, shouldExtract = true) {
@@ -996,6 +997,14 @@
         let currentGameForAI = null;
         const launchingGameIds = new Set();
 
+        function normalizedText(value = '') {
+            return String(value || '').trim().toLowerCase();
+        }
+
+        function renderLucideIcons() {
+            if (window.lucide) lucide.createIcons();
+        }
+
         function getGameStyle(game) {
             if (game.coverUrl) return `background-image:url('${game.coverUrl}');background-size:cover;background-position:center;`;
             return '';
@@ -1017,7 +1026,7 @@
                     <span class="font-medium text-sm truncate">${getDisplayTitle(game)}</span>
                 </div>
              `).join('');
-             if(window.lucide) lucide.createIcons();
+             renderLucideIcons();
         }
 
         function renderLibraryGrid(filter, searchTerm = '') {
@@ -1030,20 +1039,26 @@
             else if (filter === 'favorites') filteredGames = allGames.filter(g => g.isFav);
 
             if (searchTerm) {
-                const term = searchTerm.toLowerCase();
+                const term = normalizedText(searchTerm);
                 filteredGames = filteredGames
-                    .filter(g => (g.titleEn || '').toLowerCase().includes(term) || (g.title || '').toLowerCase().includes(term))
-                    .sort((a, b) => {
-                        const aEn = (a.titleEn || '').toLowerCase().includes(term) ? 0 : 1;
-                        const bEn = (b.titleEn || '').toLowerCase().includes(term) ? 0 : 1;
-                        return aEn - bEn;
-                    });
+                    .map((g) => {
+                        const titleEn = normalizedText(g.titleEn);
+                        const titleZh = normalizedText(g.title);
+                        return {
+                            game: g,
+                            matchEn: titleEn.includes(term),
+                            matchZh: titleZh.includes(term),
+                        };
+                    })
+                    .filter((item) => item.matchEn || item.matchZh)
+                    .sort((a, b) => Number(b.matchEn) - Number(a.matchEn))
+                    .map((item) => item.game);
             }
 
             if (filteredGames.length === 0) {
                 gridContainer.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-20 text-slate-400"><i data-lucide="ghost" class="w-16 h-16 mb-4 opacity-50"></i><p class="text-lg mb-3">没有找到游戏，点击下方按钮添加</p><button onclick="window.quickAddGame?.()" class="px-4 py-2 rounded-lg text-white theme-bg theme-hover">新建游戏</button></div>`;
                 gridContainer.style.gridTemplateColumns = '1fr';
-                if(window.lucide) lucide.createIcons();
+                renderLucideIcons();
                 return;
             }
 
@@ -1081,7 +1096,7 @@
                     </div>
                 </div>`).join('');
             }
-            if(window.lucide) lucide.createIcons();
+            renderLucideIcons();
         }
 
         function refreshLibrary() {
@@ -1270,7 +1285,7 @@
             if (currentGameForAI?.id === id && detailLaunchBtn) {
                 detailLaunchBtn.disabled = true;
                 detailLaunchBtn.innerHTML = '<i data-lucide="loader-circle" class="w-6 h-6 animate-spin"></i><span>加载中...</span>';
-                if(window.lucide) lucide.createIcons();
+                renderLucideIcons();
             }
             const result = await electronAPI.launchGame(id);
             if (!result.ok) alert(`启动失败: ${result.error}`);
@@ -1283,7 +1298,7 @@
                 if (currentGameForAI?.id === id && detailLaunchBtn) {
                     detailLaunchBtn.disabled = false;
                     detailLaunchBtn.innerHTML = '<i data-lucide="play" class="w-6 h-6 fill-current"></i><span>启动游戏</span>';
-                    if(window.lucide) lucide.createIcons();
+                    renderLucideIcons();
                 }
                 refreshLibrary();
             }, 5000);
@@ -1299,7 +1314,7 @@
                 btn.className = "p-4 bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-2xl hover:bg-white/20 transition-all";
                 btn.innerHTML = `<i data-lucide="star" class="w-6 h-6"></i>`;
             }
-            if(window.lucide) lucide.createIcons();
+            renderLucideIcons();
         }
 
         window.toggleDetailFavorite = () => {
@@ -1383,7 +1398,7 @@
             document.getElementById('game-form-close').onclick = close;
             document.getElementById('game-form-cancel').onclick = close;
             document.getElementById('game-form-backdrop').onclick = close;
-            if(window.lucide) lucide.createIcons();
+            renderLucideIcons();
         }
 
         async function openGameForm(mode, game = null) {
@@ -1579,7 +1594,7 @@
             document.getElementById('steam-detail-refresh-btn')?.addEventListener('click', () => {
                 if (currentGameForAI) loadSteamDetailInfo(currentGameForAI);
             });
-            if(window.lucide) lucide.createIcons();
+            renderLucideIcons();
         }
 
         const defaultCommunityPosts = [
@@ -1944,7 +1959,7 @@
         loadHomeContent();
         document.getElementById('home-refresh-btn')?.addEventListener('click', loadHomeContent);
         renderPresets();
-        if(window.lucide) lucide.createIcons();
+        renderLucideIcons();
 
     </script>
 </body>

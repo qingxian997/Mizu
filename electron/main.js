@@ -508,7 +508,8 @@ ipcMain.handle('games:resolveSteamAppId', (_, game) => resolveSteamAppId(game));
 ipcMain.handle('steam:getGameInfo', (_, game, apiKey) => getSteamGameInfo(game, apiKey));
 ipcMain.handle('steam:getCommunityFeed', (_, games, apiKey) => getSteamCommunityFeed(games, apiKey));
 ipcMain.handle('games:launch', (_, id) => {
-  const game = readGames().find((g) => g.id === id);
+  const games = readGames();
+  const game = games.find((g) => g.id === id);
   if (!game) return { ok: false, error: '游戏不存在' };
 
   try {
@@ -535,7 +536,7 @@ ipcMain.handle('games:launch', (_, id) => {
       }
     }
 
-    const next = readGames().map((g) => (g.id === id ? { ...g, lastPlayed: '刚刚', isRecent: true } : g));
+    const next = games.map((g) => (g.id === id ? { ...g, lastPlayed: '刚刚', isRecent: true } : g));
     writeGames(next);
     return { ok: true };
   } catch (error) {
