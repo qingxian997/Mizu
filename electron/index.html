@@ -1273,8 +1273,8 @@
                             <div>
                                 <label class="text-sm text-slate-600">游戏目录（可选）</label>
                                 <div class="flex gap-2 mt-1">
-                                    <input id="game-working-dir-input" class="flex-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="D:/Games/MyGame" />
-                                    <button id="pick-working-dir-btn" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm">选择</button>
+                                    <input id="game-exec-input" class="flex-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="D:/Games/game.exe 或 steam://rungameid/..." />
+                                    <button id="pick-exec-btn" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm">选择</button>
                                 </div>
                             </div>
                             <div>
@@ -1327,7 +1327,6 @@
             titleInput.value = game?.title || '';
             englishTitleInput.value = game?.englishTitle || '';
             execInput.value = game?.execPath || '';
-            workingDirInput.value = game?.workingDir || '';
             argsInput.value = Array.isArray(game?.args) ? game.args.join(' ') : (game?.args || '');
             coverInput.value = game?.coverUrl || '';
             landscapeCoverInput.value = game?.landscapeCoverUrl || '';
@@ -1375,7 +1374,6 @@
                     englishTitle: englishTitleInput.value.trim(),
                     execPath: execInput.value.trim(),
                     args: parseArgsInput(argsInput.value),
-                    workingDir: workingDirInput.value.trim(),
                     coverUrl: coverInput.value.trim() || DEFAULT_PORTRAIT_COVER,
                     landscapeCoverUrl: landscapeCoverInput.value.trim() || DEFAULT_LANDSCAPE_COVER,
                 };
@@ -1400,7 +1398,7 @@
                     }
                 } else {
                     if (mode === 'add') {
-                        allGames.push({ id: Date.now(), ...payload, workingDir: payload.workingDir || payload.execPath.replace(/[\\/][^\\/]+$/, ''), coverUrl: payload.coverUrl || DEFAULT_PORTRAIT_COVER, landscapeCoverUrl: payload.landscapeCoverUrl || DEFAULT_LANDSCAPE_COVER, isFav: false, isRecent: false, hours: 0, lastPlayed: '未运行', color: 'from-slate-700 via-slate-600 to-slate-900' });
+                        allGames.push({ id: Date.now(), ...payload, coverUrl: payload.coverUrl || DEFAULT_PORTRAIT_COVER, landscapeCoverUrl: payload.landscapeCoverUrl || DEFAULT_LANDSCAPE_COVER, isFav: false, isRecent: false, hours: 0, lastPlayed: '未运行', color: 'from-slate-700 via-slate-600 to-slate-900' });
                     } else {
                         allGames = allGames.map(g => g.id === game.id ? { ...g, ...payload } : g);
                     }
