@@ -218,6 +218,12 @@ async function fetchCover(game = {}) {
   return fallback;
 }
 
+async function fetchSingleCover(game = {}, type = 'portrait') {
+  const cover = await fetchCover(game);
+  if (type === 'landscape') return cover?.landscape || cover?.portrait || DEFAULT_LANDSCAPE_COVER;
+  return cover?.portrait || cover?.landscape || DEFAULT_PORTRAIT_COVER;
+}
+
 async function getSteamGameInfo(game, apiKey) {
   const appId = await resolveSteamAppId(game);
   const title = String(game?.title || game?.titleEn || '').trim();
@@ -431,6 +437,9 @@ ipcMain.handle('games:pickCoverFile', async () => {
   return toFileUrl(result.filePaths[0]);
 });
 ipcMain.handle('games:fetchCover', (_, title) => fetchCover(title));
+ipcMain.handle('games:fetchPortraitCover', (_, game) => fetchSingleCover(game, 'portrait'));
+ipcMain.handle('games:fetchLandscapeCover', (_, game) => fetchSingleCover(game, 'landscape'));
+ipcMain.handle('games:resolveSteamAppId', (_, game) => resolveSteamAppId(game));
 ipcMain.handle('steam:getGameInfo', (_, game, apiKey) => getSteamGameInfo(game, apiKey));
 ipcMain.handle('steam:getCommunityFeed', (_, games, apiKey) => getSteamCommunityFeed(games, apiKey));
 ipcMain.handle('games:launch', (_, id) => {
