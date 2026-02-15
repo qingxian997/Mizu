@@ -486,7 +486,7 @@
                     <div id="home-deals" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
                 </section>
                 <section>
-                    <div class="flex items-center justify-between mb-4"><h3 class="text-2xl font-bold text-slate-800">Steam 新闻</h3><span class="text-xs text-slate-500">数据来源: SteamDB</span></div>
+                    <div class="flex items-center justify-between mb-4"><h3 class="text-2xl font-bold text-slate-800">Steam 新闻</h3><span class="text-xs text-slate-500">数据来源: Steam</span></div>
                     <div id="home-news" class="space-y-3"></div>
                 </section>
             </div>
@@ -857,7 +857,7 @@
         // --- 4. HOME LOGIC ---
         const HOME_API = {
             featured: 'https://store.steampowered.com/api/featuredcategories?cc=cn&l=schinese',
-            steamdbNews: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://steamdb.info/blog/rss/'),
+            steamNews: 'https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=753&count=5&maxlength=220&format=json',
         };
 
         const DEFAULT_PORTRAIT_COVER = 'https://images.weserv.nl/?url=store.steampowered.com/public/shared/images/responsive/header_logo.png&w=600&h=900&fit=cover';
@@ -867,7 +867,7 @@
             const deals = document.getElementById('home-deals');
             const news = document.getElementById('home-news');
             if (deals) deals.innerHTML = '<div class="text-slate-500">正在加载 Steam 优惠...</div>';
-            if (news) news.innerHTML = '<div class="text-slate-500">正在加载 SteamDB 新闻...</div>';
+            if (news) news.innerHTML = '<div class="text-slate-500">正在加载 Steam 新闻...</div>';
         }
 
         function updateHomeTimestamp() {
@@ -895,9 +895,11 @@
         }
 
         function renderNewsItem(item) {
+            const link = item.url || item.link || 'https://store.steampowered.com/news/';
+            const dateSource = item.date ? item.date * 1000 : item.pubDate;
             return `
-                <a href="${item.link}" target="_blank" rel="noreferrer" class="glass-panel p-4 block hover:bg-white/90 transition-colors">
-                    <div class="text-xs text-slate-500 mb-1">${new Date(item.pubDate).toLocaleString('zh-CN')}</div>
+                <a href="${link}" target="_blank" rel="noreferrer" class="glass-panel p-4 block hover:bg-white/90 transition-colors">
+                    <div class="text-xs text-slate-500 mb-1">${new Date(dateSource).toLocaleString('zh-CN')}</div>
                     <div class="font-semibold text-slate-800">${item.title}</div>
                 </a>
             `;
@@ -930,15 +932,15 @@
             const container = document.getElementById('home-news');
             if (!container) return;
             try {
-                const res = await fetch(HOME_API.steamdbNews);
+                const res = await fetch(HOME_API.steamNews);
                 const payload = await res.json();
-                const items = payload.items || [];
+                const items = payload?.appnews?.newsitems || [];
                 if (!items.length) throw new Error('empty news');
                 container.innerHTML = items.slice(0, 5).map(renderNewsItem).join('');
             } catch (e) {
                 container.innerHTML = `
-                    <a href="https://steamdb.info/blog/" target="_blank" rel="noreferrer" class="glass-panel p-4 block">
-                        <div class="font-semibold text-slate-800">SteamDB 新闻加载失败，点击前往官网</div>
+                    <a href="https://store.steampowered.com/news/" target="_blank" rel="noreferrer" class="glass-panel p-4 block">
+                        <div class="font-semibold text-slate-800">Steam 新闻加载失败，点击前往官网</div>
                     </a>
                 `;
             }
@@ -1066,6 +1068,40 @@
             const m = value.match(/store\.steampowered\.com\/app\/(\d+)/i);
             if (m) return `steam://rungameid/${m[1]}`;
             return value;
+        }
+
+        function getSteamAppIdFromText(input = '') {
+            const value = String(input || '').trim();
+            if (!value) return '';
+            if (/^\d+$/.test(value)) return value;
+            const run = value.match(/^steam:\/\/rungameid\/(\d+)/i);
+            if (run) return run[1];
+            const store = value.match(/store\.steampowered\.com\/app\/(\d+)/i);
+            if (store) return store[1];
+            return '';
+        }
+
+        async function syncSteamAppIdFields({ execInput, appIdInput, titleInput, titleEnInput }) {
+            const fromExec = getSteamAppIdFromText(execInput.value);
+            if (fromExec) {
+                appIdInput.value = fromExec;
+                execInput.value = normalizeSteamLaunchPath(fromExec);
+                return fromExec;
+            }
+            if (!electronAPI?.resolveSteamAppId) return '';
+            const resolved = await electronAPI.resolveSteamAppId({
+                title: titleInput.value.trim(),
+                titleEn: titleEnInput.value.trim(),
+                steamAppId: appIdInput.value.trim(),
+                execPath: execInput.value.trim(),
+            });
+            const normalized = getSteamAppIdFromText(resolved);
+            if (normalized) {
+                appIdInput.value = normalized;
+                execInput.value = normalizeSteamLaunchPath(normalized);
+                return normalized;
+            }
+            return '';
         }
 
         function getSteamApiKey() {
@@ -1250,6 +1286,10 @@
                                 </div>
                             </div>
                             <div>
+                                <label class="text-sm text-slate-600">Steam AppID（自动识别，可手动修正）</label>
+                                <input id="game-appid-input" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="例如：570" />
+                            </div>
+                            <div>
                                 <label class="text-sm text-slate-600">工作目录（推荐设置为游戏安装目录）</label>
                                 <div class="flex gap-2 mt-1">
                                     <input id="game-working-dir-input" class="flex-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="D:/Games/MyGame" />
@@ -1272,6 +1312,7 @@
                                 <label class="text-sm text-slate-600">横屏封面地址（详情页背景）</label>
                                 <div class="flex gap-2 mt-1">
                                     <input id="game-landscape-cover-input" class="flex-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="https://.../landscape.jpg 或本地图片" />
+                                    <button id="fetch-landscape-cover-btn" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm">自动</button>
                                     <button id="pick-landscape-cover-btn" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm">本地</button>
                                 </div>
                             </div>
@@ -1298,6 +1339,7 @@
             const titleInput = document.getElementById('game-name-input');
             const titleEnInput = document.getElementById('game-name-en-input');
             const execInput = document.getElementById('game-exec-input');
+            const appIdInput = document.getElementById('game-appid-input');
             const workingDirInput = document.getElementById('game-working-dir-input');
             const argsInput = document.getElementById('game-args-input');
             const coverInput = document.getElementById('game-cover-input');
@@ -1306,14 +1348,23 @@
             titleInput.value = game?.title || '';
             titleEnInput.value = game?.titleEn || '';
             execInput.value = game?.execPath || '';
+            appIdInput.value = game?.steamAppId || getSteamAppIdFromText(game?.execPath || '') || '';
             workingDirInput.value = game?.workingDir || '';
             argsInput.value = Array.isArray(game?.args) ? game.args.join(' ') : (game?.args || '');
             coverInput.value = game?.coverUrl || '';
             landscapeCoverInput.value = game?.landscapeCoverUrl || '';
             modal.classList.remove('hidden');
             setTimeout(() => titleInput.focus(), 30);
-            execInput.onblur = () => {
+            execInput.onblur = async () => {
                 execInput.value = normalizeSteamLaunchPath(execInput.value.trim());
+                const appId = getSteamAppIdFromText(execInput.value);
+                if (appId) appIdInput.value = appId;
+                else await syncSteamAppIdFields({ execInput, appIdInput, titleInput, titleEnInput });
+            };
+            appIdInput.onblur = () => {
+                const appId = getSteamAppIdFromText(appIdInput.value.trim());
+                appIdInput.value = appId;
+                if (appId) execInput.value = normalizeSteamLaunchPath(appId);
             };
 
             document.getElementById('pick-exec-btn').onclick = async () => {
@@ -1336,6 +1387,17 @@
                 const p = await electronAPI.pickCoverFile();
                 if (p) coverInput.value = p;
             };
+            document.getElementById('fetch-landscape-cover-btn').onclick = async () => {
+                const payloadForCover = {
+                    title: titleInput.value.trim(),
+                    titleEn: titleEnInput.value.trim(),
+                    steamAppId: appIdInput.value.trim(),
+                    execPath: normalizeSteamLaunchPath(execInput.value.trim()),
+                };
+                if ((!payloadForCover.title && !payloadForCover.titleEn && !payloadForCover.steamAppId && !payloadForCover.execPath) || !electronAPI) return;
+                const landscapeCover = electronAPI.fetchLandscapeCover ? await electronAPI.fetchLandscapeCover(payloadForCover) : null;
+                landscapeCoverInput.value = landscapeCover || DEFAULT_LANDSCAPE_COVER;
+            };
             document.getElementById('pick-landscape-cover-btn').onclick = async () => {
                 if (!electronAPI?.pickCoverFile) return;
                 const p = await electronAPI.pickCoverFile();
@@ -1345,23 +1407,20 @@
                 const payloadForCover = {
                     title: titleInput.value.trim(),
                     titleEn: titleEnInput.value.trim(),
+                    steamAppId: appIdInput.value.trim(),
                     execPath: normalizeSteamLaunchPath(execInput.value.trim()),
                 };
-                if ((!payloadForCover.title && !payloadForCover.titleEn) || !electronAPI) return;
-                const cover = await electronAPI.fetchCover(payloadForCover);
-                if (typeof cover === 'string') {
-                    coverInput.value = cover || DEFAULT_PORTRAIT_COVER;
-                    landscapeCoverInput.value = cover || DEFAULT_LANDSCAPE_COVER;
-                } else {
-                    coverInput.value = cover?.portrait || DEFAULT_PORTRAIT_COVER;
-                    landscapeCoverInput.value = cover?.landscape || cover?.portrait || DEFAULT_LANDSCAPE_COVER;
-                }
+                if ((!payloadForCover.title && !payloadForCover.titleEn && !payloadForCover.steamAppId && !payloadForCover.execPath) || !electronAPI) return;
+                const portraitCover = electronAPI.fetchPortraitCover ? await electronAPI.fetchPortraitCover(payloadForCover) : null;
+                coverInput.value = portraitCover || DEFAULT_PORTRAIT_COVER;
             };
 
             document.getElementById('game-form-save').onclick = async () => {
+                const resolvedAppId = await syncSteamAppIdFields({ execInput, appIdInput, titleInput, titleEnInput });
                 const payload = {
                     title: titleInput.value.trim(),
                     titleEn: titleEnInput.value.trim(),
+                    steamAppId: getSteamAppIdFromText(appIdInput.value.trim()) || resolvedAppId,
                     execPath: normalizeSteamLaunchPath(execInput.value.trim()),
                     args: parseArgsInput(argsInput.value),
                     workingDir: workingDirInput.value.trim(),
