@@ -135,6 +135,18 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.1); border-radius: 20px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(0,0,0,0.2); }
 
+        .title-marquee { overflow: hidden; white-space: nowrap; }
+        .title-marquee-inner { display: inline-block; min-width: 100%; }
+        .title-marquee.should-marquee .title-marquee-inner {
+            padding-right: 1.5rem;
+            animation: title-marquee-scroll 8s linear infinite;
+        }
+        @keyframes title-marquee-scroll {
+            0%, 16% { transform: translateX(0); }
+            84%, 100% { transform: translateX(-40%); }
+        }
+        body.cover-title-hidden .game-cover-title { display: none; }
+
         .fade-hidden { opacity: 0; pointer-events: none; transition: opacity 0.2s ease-out; }
         .fade-visible { opacity: 1; pointer-events: auto; transition: opacity 0.2s ease-in; }
         
@@ -368,6 +380,13 @@
                                     <input type="color" id="theme-color-picker" class="w-10 h-10 rounded-full cursor-pointer border-2 border-white shadow-sm" value="#3b82f6" title="选择主题色">
                                     <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer"><input type="checkbox" id="auto-theme-color" class="rounded theme-text focus:ring-blue-500" checked> 自动匹配</label>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div class="p-5 bg-white/40 rounded-2xl border border-white/50 space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div><h4 class="font-bold text-slate-700">封面文字显示</h4><p class="text-xs text-slate-500">控制游戏封面顶部标题是否显示。</p></div>
+                                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer"><input type="checkbox" id="cover-title-toggle" class="rounded theme-text focus:ring-blue-500" checked> 显示</label>
                             </div>
                         </div>
 
@@ -717,17 +736,20 @@
         const overlaySlider = document.getElementById('overlay-slider');
         const overlayValue = document.getElementById('overlay-value');
         const bgOverlay = document.getElementById('bg-overlay');
+        const coverTitleToggle = document.getElementById('cover-title-toggle');
 
         function loadSettings() {
             const savedBg = localStorage.getItem('steam_custom_bg');
             const savedColor = localStorage.getItem('steam_theme_color');
             const savedBlur = localStorage.getItem('steam_glass_blur');
             const savedOverlay = localStorage.getItem('steam_bg_overlay'); // Load opacity
-            
+            const savedCoverTitle = localStorage.getItem('steam_show_cover_title');
+
             if (savedColor) applyThemeColor(savedColor);
             if (savedBg) applyBackground(savedBg, false);
             if (savedBlur) applyBlur(savedBlur);
             if (savedOverlay) applyOverlay(savedOverlay);
+            applyCoverTitleVisibility(savedCoverTitle !== '0');
         }
 
         function applyBlur(val) {
@@ -743,6 +765,13 @@
             if(bgOverlay) bgOverlay.style.backgroundColor = `rgba(0, 0, 0, ${opacity})`;
             if(overlaySlider) overlaySlider.value = val;
             if(overlayValue) overlayValue.innerText = val + '%';
+        }
+
+        function applyCoverTitleVisibility(visible) {
+            const shouldShow = Boolean(visible);
+            if (coverTitleToggle) coverTitleToggle.checked = shouldShow;
+            document.body.classList.toggle('cover-title-hidden', !shouldShow);
+            refreshLibrary();
         }
 
         function applyBackground(dataUrl, shouldExtract = true) {
@@ -828,6 +857,11 @@
         });
         overlaySlider.addEventListener('change', (e) => {
             localStorage.setItem('steam_bg_overlay', e.target.value);
+        });
+
+        coverTitleToggle?.addEventListener('change', (e) => {
+            applyCoverTitleVisibility(e.target.checked);
+            localStorage.setItem('steam_show_cover_title', e.target.checked ? '1' : '0');
         });
 
         // NEW: Preset Gallery Logic
@@ -967,12 +1001,20 @@
             return '';
         }
 
+        function getDisplayTitle(game) {
+            return (game?.title || '').trim() || (game?.titleEn || '').trim() || '未命名游戏';
+        }
+
+        function getMarqueeClass(text = '') {
+            return String(text || '').length > 12 ? 'title-marquee should-marquee' : 'title-marquee';
+        }
+
         function renderSidebarGameList() {
              const listContainer = document.getElementById('sidebar-games');
              listContainer.innerHTML = allGames.slice(0, 8).map(game => `
                 <div class="flex items-center gap-4 px-4 py-3 mx-2 rounded-r-full cursor-pointer transition-all duration-200 group text-slate-600 hover:bg-black/5" onclick="document.dispatchEvent(new CustomEvent('openGameDetail', {detail: ${game.id}}))">
                     <div class="transition-transform duration-200 group-hover:scale-110"><i data-lucide="gamepad-2" class="w-5 h-5"></i></div>
-                    <span class="font-medium text-sm truncate">${game.title}</span>
+                    <span class="font-medium text-sm truncate">${getDisplayTitle(game)}</span>
                 </div>
              `).join('');
              if(window.lucide) lucide.createIcons();
@@ -989,7 +1031,13 @@
 
             if (searchTerm) {
                 const term = searchTerm.toLowerCase();
-                filteredGames = filteredGames.filter(g => (g.title || '').toLowerCase().includes(term) || (g.titleEn || '').toLowerCase().includes(term));
+                filteredGames = filteredGames
+                    .filter(g => (g.titleEn || '').toLowerCase().includes(term) || (g.title || '').toLowerCase().includes(term))
+                    .sort((a, b) => {
+                        const aEn = (a.titleEn || '').toLowerCase().includes(term) ? 0 : 1;
+                        const bEn = (b.titleEn || '').toLowerCase().includes(term) ? 0 : 1;
+                        return aEn - bEn;
+                    });
             }
 
             if (filteredGames.length === 0) {
@@ -1006,7 +1054,9 @@
                 <div class="game-card group relative w-full aspect-[3/4] rounded-3xl transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl cursor-pointer" onclick="document.dispatchEvent(new CustomEvent('openGameDetail', {detail: ${game.id}}))">
                     <div class="absolute inset-0 rounded-3xl overflow-hidden bg-white/40 backdrop-blur-md shadow-md border border-white/20">
                         <div class="absolute inset-0 bg-gradient-to-br ${game.color || 'from-slate-700 to-slate-900'} opacity-80 transition-transform duration-700 group-hover:scale-110" style="${getGameStyle(game)}"></div>
-                        <div class="absolute top-6 left-0 w-full text-center px-4"><h3 class="text-white font-bold text-2xl drop-shadow-md">${game.title}</h3></div>
+                        <div class="absolute top-6 left-0 w-full text-center px-4 game-cover-title">
+                            <h3 class="text-white font-bold text-2xl drop-shadow-md ${getMarqueeClass(getDisplayTitle(game))}"><span class="title-marquee-inner">${getDisplayTitle(game)}</span></h3>
+                        </div>
                         <button class="absolute top-3 right-3 z-30 p-2 rounded-full transition-all duration-200 ${game.isFav ? 'text-yellow-400 opacity-100' : 'text-white opacity-0 group-hover:opacity-100 hover:bg-black/20'}" onclick="event.stopPropagation(); window.toggleFavorite(${game.id});"><i data-lucide="star" class="w-5 h-5 ${game.isFav ? 'fill-current' : ''}"></i></button>
                         <div class="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-between p-4 z-20">
                             <div class="text-white/80 text-xs font-bold uppercase tracking-wider mb-2">${game.hours || 0}H</div>
@@ -1023,7 +1073,7 @@
                         <div class="w-12 h-12 rounded-lg bg-gradient-to-br ${game.color || 'from-slate-700 to-slate-900'} shadow-sm flex items-center justify-center text-white overflow-hidden" style="${getGameStyle(game)}">${game.coverUrl ? '' : `<i data-lucide="${game.icon || 'gamepad-2'}" class="w-6 h-6"></i>`}</div>
                         <div class="flex items-center gap-2">
                             <button class="p-1 rounded-full transition-colors ${game.isFav ? 'text-yellow-500' : 'text-slate-300 hover:text-yellow-400'}" onclick="event.stopPropagation(); window.toggleFavorite(${game.id});"><i data-lucide="star" class="w-4 h-4 ${game.isFav ? 'fill-current' : ''}"></i></button>
-                            <div><div class="font-bold text-slate-800">${game.title}</div><div class="text-xs text-slate-500">上次运行: ${game.lastPlayed || '未运行'}</div></div>
+                            <div><div class="font-bold text-slate-800">${getDisplayTitle(game)}</div><div class="text-xs text-slate-500">上次运行: ${game.lastPlayed || '未运行'}</div></div>
                         </div>
                     </div>
                     <div class="flex items-center gap-4">
@@ -1281,16 +1331,19 @@
                             <div>
                                 <label class="text-sm text-slate-600">启动路径（快捷方式或可执行文件）</label>
                                 <div class="flex gap-2 mt-1">
-                                    <input id="game-exec-input" class="flex-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="D:/switch/yuzu/yuzu.exe -f -g &quot;D:/switch/yuzu/games/cuphead.xci&quot; 或 steam://rungameid/570" />
+                                    <input id="game-exec-input" class="flex-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="steam://rungameid/1318690" />
                                     <button id="pick-exec-btn" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm">选择</button>
                                 </div>
                             </div>
                             <div>
-                                <label class="text-sm text-slate-600">Steam AppID（自动识别，可手动修正）</label>
-                                <input id="game-appid-input" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="例如：570" />
+                                <label class="text-sm text-slate-600">Steam AppID（可为空，点击自动识别）</label>
+                                <div class="flex gap-2 mt-1">
+                                    <input id="game-appid-input" class="flex-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="例如：570" />
+                                    <button id="auto-appid-btn" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm">自动</button>
+                                </div>
                             </div>
                             <div>
-                                <label class="text-sm text-slate-600">工作目录（推荐设置为游戏安装目录）</label>
+                                <label class="text-sm text-slate-600">工作目录（可选，可为空）</label>
                                 <div class="flex gap-2 mt-1">
                                     <input id="game-working-dir-input" class="flex-1 px-3 py-2 rounded-lg border border-slate-200" placeholder="D:/Games/MyGame" />
                                     <button id="pick-working-dir-btn" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm">选择</button>
@@ -1355,11 +1408,8 @@
             landscapeCoverInput.value = game?.landscapeCoverUrl || '';
             modal.classList.remove('hidden');
             setTimeout(() => titleInput.focus(), 30);
-            execInput.onblur = async () => {
+            execInput.onblur = () => {
                 execInput.value = normalizeSteamLaunchPath(execInput.value.trim());
-                const appId = getSteamAppIdFromText(execInput.value);
-                if (appId) appIdInput.value = appId;
-                else await syncSteamAppIdFields({ execInput, appIdInput, titleInput, titleEnInput });
             };
             appIdInput.onblur = () => {
                 const appId = getSteamAppIdFromText(appIdInput.value.trim());
@@ -1372,11 +1422,13 @@
                 const p = await electronAPI.pickExecutable();
                 if (p) {
                     execInput.value = p;
-                    if (!workingDirInput.value.trim()) {
-                        workingDirInput.value = p.replace(/[\\/][^\\/]+$/, '');
-                    }
                 }
             };
+            document.getElementById('auto-appid-btn').onclick = async () => {
+                const resolvedAppId = await syncSteamAppIdFields({ execInput, appIdInput, titleInput, titleEnInput });
+                if (!resolvedAppId) alert('未识别到 Steam AppID，可留空。');
+            };
+
             document.getElementById('pick-working-dir-btn').onclick = async () => {
                 if (!electronAPI?.pickDirectory) return;
                 const p = await electronAPI.pickDirectory();
@@ -1416,11 +1468,10 @@
             };
 
             document.getElementById('game-form-save').onclick = async () => {
-                const resolvedAppId = await syncSteamAppIdFields({ execInput, appIdInput, titleInput, titleEnInput });
                 const payload = {
                     title: titleInput.value.trim(),
                     titleEn: titleEnInput.value.trim(),
-                    steamAppId: getSteamAppIdFromText(appIdInput.value.trim()) || resolvedAppId,
+                    steamAppId: getSteamAppIdFromText(appIdInput.value.trim()),
                     execPath: normalizeSteamLaunchPath(execInput.value.trim()),
                     args: parseArgsInput(argsInput.value),
                     workingDir: workingDirInput.value.trim(),
@@ -1448,7 +1499,7 @@
                     }
                 } else {
                     if (mode === 'add') {
-                        allGames.push({ id: Date.now(), ...payload, workingDir: payload.workingDir || payload.execPath.replace(/[\\/][^\\/]+$/, ''), coverUrl: payload.coverUrl || DEFAULT_PORTRAIT_COVER, landscapeCoverUrl: payload.landscapeCoverUrl || DEFAULT_LANDSCAPE_COVER, isFav: false, isRecent: false, hours: 0, lastPlayed: '未运行', color: 'from-slate-700 via-slate-600 to-slate-900' });
+                        allGames.push({ id: Date.now(), ...payload, workingDir: payload.workingDir || '', coverUrl: payload.coverUrl || DEFAULT_PORTRAIT_COVER, landscapeCoverUrl: payload.landscapeCoverUrl || DEFAULT_LANDSCAPE_COVER, isFav: false, isRecent: false, hours: 0, lastPlayed: '未运行', color: 'from-slate-700 via-slate-600 to-slate-900' });
                     } else {
                         allGames = allGames.map(g => g.id === game.id ? { ...g, ...payload } : g);
                     }
@@ -1475,7 +1526,7 @@
 
         async function removeCurrentGame() {
             if (!currentGameForAI) return;
-            if (!confirm(`确定删除「${currentGameForAI.title}」吗？`)) return;
+            if (!confirm(`确定删除「${getDisplayTitle(currentGameForAI)}」吗？`)) return;
             if (electronAPI) {
                 await electronAPI.removeGame(currentGameForAI.id);
                 allGames = await electronAPI.getGames();
@@ -1809,7 +1860,7 @@
             const g = allGames.find(game => game.id === e.detail);
             if(g) {
                 currentGameForAI = g;
-                document.getElementById('detail-logo').innerText = g.title || g.titleEn || '未命名游戏';
+                document.getElementById('detail-logo').innerText = getDisplayTitle(g);
                 document.getElementById('detail-hours').innerText = `${g.hours} 小时`;
                 document.getElementById('detail-last-played').innerText = `上次: ${g.lastPlayed}`;
                 const hero = document.getElementById('detail-hero-bg');
@@ -1873,14 +1924,14 @@
             if(!currentGameForAI) return;
             openModal();
             document.getElementById('ai-text').innerText = "正在分析战术...";
-            const res = await callAI(`请分析《${currentGameForAI.title}》的核心乐趣，风格幽默。`);
+            const res = await callAI(`请分析《${getDisplayTitle(currentGameForAI)}》的核心乐趣，风格幽默。`);
             document.getElementById('ai-text').innerText = res;
         });
 
         document.getElementById('ai-pick-btn').addEventListener('click', async () => {
             openModal();
             document.getElementById('ai-text').innerText = "AI 正在挑选...";
-            const titles = allGames.map(g=>g.title).join(",");
+            const titles = allGames.map((g) => getDisplayTitle(g)).join(',');
             const res = await callAI(`从这些游戏中选一个适合现在玩的: ${titles}。返回游戏名和理由。`);
             document.getElementById('ai-text').innerText = res;
         });
