@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fetchPortraitCover: (game) => ipcRenderer.invoke('games:fetchPortraitCover', game),
   fetchLandscapeCover: (game) => ipcRenderer.invoke('games:fetchLandscapeCover', game),
   resolveSteamAppId: (game) => ipcRenderer.invoke('games:resolveSteamAppId', game),
-  getSteamGameInfo: (game, apiKey) => ipcRenderer.invoke('steam:getGameInfo', game, apiKey),
-  getSteamCommunityFeed: (games, apiKey) => ipcRenderer.invoke('steam:getCommunityFeed', games, apiKey),
+  getSteamGameInfo: (game, apiKey, steamId) => ipcRenderer.invoke('steam:getGameInfo', game, apiKey, steamId),
+  getSteamCommunityFeed: (games, apiKey, steamId) => ipcRenderer.invoke('steam:getCommunityFeed', games, apiKey, steamId),
+  getSteamFriends: (apiKey, steamId) => ipcRenderer.invoke('steam:getFriends', apiKey, steamId),
+  importSteamOwnedGames: (apiKey, steamId) => ipcRenderer.invoke('steam:importOwnedGames', apiKey, steamId),
 });

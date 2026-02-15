@@ -137,6 +137,14 @@ function withDefaults(game) {
   };
 }
 
+function formatLastPlayed(lastPlayedUnix) {
+  const value = Number(lastPlayedUnix || 0);
+  if (!value) return '未运行';
+  const date = new Date(value * 1000);
+  if (Number.isNaN(date.getTime())) return '未运行';
+  return date.toISOString();
+}
+
 function toFileUrl(filePath) {
   return pathToFileURL(path.resolve(filePath)).toString();
 }
@@ -291,7 +299,7 @@ async function fetchSingleCover(game = {}, type = 'portrait') {
   return cover?.portrait || cover?.landscape || DEFAULT_PORTRAIT_COVER;
 }
 
-async function getSteamGameInfo(game, apiKey) {
+async function getSteamGameInfo(game, apiKey, steamId) {
   const appId = await resolveSteamAppId(game);
   const title = String(game?.title || game?.titleEn || '').trim();
   if (!appId) {
@@ -324,6 +332,30 @@ async function getSteamGameInfo(game, apiKey) {
     achievementTotal = appData?.achievements?.total ?? null;
   } catch {}
 
+  let playerAchievement = null;
+  if (apiKey && steamId) {
+    try {
+      const achRes = await fetch(`https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/?key=${encodeURIComponent(apiKey)}&steamid=${encodeURIComponent(steamId)}&appid=${appId}`);
+      const achJson = await achRes.json();
+      const items = achJson?.playerstats?.achievements || [];
+      const unlocked = items.filter((item) => item.achieved === 1);
+      const rate = items.length ? Math.round((unlocked.length / items.length) * 100) : 0;
+      playerAchievement = {
+        total: items.length,
+        unlocked: unlocked.length,
+        rate,
+        recent: unlocked
+          .filter((item) => Number(item.unlocktime || 0) > 0)
+          .sort((a, b) => Number(b.unlocktime || 0) - Number(a.unlocktime || 0))
+          .slice(0, 8)
+          .map((item) => ({
+            key: item.apiname,
+            unlockTime: item.unlocktime,
+          })),
+      };
+    } catch {}
+  }
+
   let news = [];
   try {
     const newsRes = await fetch(`https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=${appId}&count=3&maxlength=220&format=json`);
@@ -341,13 +373,14 @@ async function getSteamGameInfo(game, apiKey) {
     price: appData?.price_overview?.final_formatted || '价格信息暂不可用',
     currentPlayers,
     achievementTotal,
+    playerAchievement,
     news,
     steamUrl: `https://store.steampowered.com/app/${appId}/`,
     steamdbUrl: `https://steamdb.info/app/${appId}/`,
   };
 }
 
-async function getSteamCommunityFeed(games, apiKey) {
+async function getSteamCommunityFeed(games, apiKey, steamId) {
   const normalizedGames = Array.isArray(games) ? games.slice(0, 6) : [];
   const entries = [];
 
@@ -390,7 +423,118 @@ async function getSteamCommunityFeed(games, apiKey) {
     } catch {}
   }
 
+  if (apiKey && steamId) {
+    try {
+      const recentRes = await fetch(`https://api.steampowered.com/IPlayerService/GetRecentlyPlayedGames/v1/?key=${encodeURIComponent(apiKey)}&steamid=${encodeURIComponent(steamId)}`);
+      const recentJson = await recentRes.json();
+      const recentGames = recentJson?.response?.games || [];
+      for (const game of recentGames.slice(0, 3)) {
+        entries.push({
+          appId: String(game.appid),
+          title: game.name,
+          currentPlayers: null,
+          news: [{
+            gid: `recent-${game.appid}`,
+            title: `你最近游玩了 ${Math.round((game.playtime_2weeks || 0) / 60)} 小时`,
+            url: `https://store.steampowered.com/app/${game.appid}/`,
+            excerpt: `过去两周游玩 ${Math.round((game.playtime_2weeks || 0) / 60)} 小时，总时长 ${Math.round((game.playtime_forever || 0) / 60)} 小时。`,
+            author: 'Steam',
+            date: Math.floor(Date.now() / 1000),
+            feedlabel: 'recent_playtime',
+          }],
+        });
+      }
+    } catch {}
+  }
+
   return entries;
+}
+
+async function getSteamFriends(apiKey, steamId) {
+  if (!apiKey || !steamId) return [];
+  try {
+    const listRes = await fetch(`https://api.steampowered.com/ISteamUser/GetFriendList/v1/?key=${encodeURIComponent(apiKey)}&steamid=${encodeURIComponent(steamId)}&relationship=friend`);
+    const listJson = await listRes.json();
+    const friendIds = (listJson?.friendslist?.friends || []).map((item) => item.steamid).slice(0, 50);
+    if (!friendIds.length) return [];
+
+    const summaryRes = await fetch(`https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${encodeURIComponent(apiKey)}&steamids=${friendIds.join(',')}`);
+    const summaryJson = await summaryRes.json();
+    return (summaryJson?.response?.players || []).map((player) => {
+      const status = Number(player.personastate || 0) > 0 ? 'online' : 'offline';
+      return {
+        id: player.steamid,
+        name: player.personaname,
+        status,
+        game: player.gameextrainfo ? `在线 · ${player.gameextrainfo}` : (status === 'online' ? '在线' : '离线'),
+        avatar: player.avatarmedium || player.avatarfull || '',
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function importSteamOwnedGames(apiKey, steamId) {
+  if (!apiKey || !steamId) {
+    return { ok: false, error: '请先填写 Steam API Key 与 SteamID64' };
+  }
+
+  try {
+    const res = await fetch(`https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=${encodeURIComponent(apiKey)}&steamid=${encodeURIComponent(steamId)}&include_appinfo=1&include_played_free_games=1&format=json`);
+    const payload = await res.json();
+    const owned = payload?.response?.games || [];
+    if (!owned.length) return { ok: false, error: '未获取到可导入的 Steam 游戏' };
+
+    const games = readGames();
+    const byAppId = new Map(games.map((g) => [String(g.steamAppId || ''), g]));
+    let added = 0;
+    let updated = 0;
+
+    for (const item of owned) {
+      const appId = String(item.appid || '');
+      if (!appId) continue;
+      const basePayload = withDefaults({
+        id: Date.now() + Number(appId),
+        title: item.name || `Steam App ${appId}`,
+        titleEn: item.name || '',
+        steamAppId: appId,
+        execPath: `steam://rungameid/${appId}`,
+        coverUrl: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
+        landscapeCoverUrl: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
+        hours: Number(((item.playtime_forever || 0) / 60).toFixed(1)),
+        lastPlayed: formatLastPlayed(item.rtime_last_played),
+        isRecent: Number(item.rtime_last_played || 0) > 0,
+      });
+
+      const existing = byAppId.get(appId);
+      if (existing) {
+        const merged = withDefaults({
+          ...existing,
+          title: existing.title || basePayload.title,
+          titleEn: existing.titleEn || basePayload.titleEn,
+          steamAppId: appId,
+          execPath: existing.execPath || basePayload.execPath,
+          coverUrl: existing.coverUrl || basePayload.coverUrl,
+          landscapeCoverUrl: existing.landscapeCoverUrl || basePayload.landscapeCoverUrl,
+          hours: Math.max(Number(existing.hours || 0), Number(basePayload.hours || 0)),
+          lastPlayed: basePayload.lastPlayed === '未运行' ? existing.lastPlayed : basePayload.lastPlayed,
+          isRecent: existing.isRecent || basePayload.isRecent,
+        });
+        const index = games.findIndex((g) => g.id === existing.id);
+        if (index >= 0) games[index] = merged;
+        updated += 1;
+      } else {
+        games.push(basePayload);
+        added += 1;
+      }
+    }
+
+    writeGames(games);
+    return { ok: true, added, updated, total: games.length };
+  } catch (error) {
+    return { ok: false, error: error.message || '导入失败' };
+  }
 }
 
 function createWindow() {
@@ -507,8 +651,10 @@ ipcMain.handle('games:fetchCover', (_, title) => fetchCover(title));
 ipcMain.handle('games:fetchPortraitCover', (_, game) => fetchSingleCover(game, 'portrait'));
 ipcMain.handle('games:fetchLandscapeCover', (_, game) => fetchSingleCover(game, 'landscape'));
 ipcMain.handle('games:resolveSteamAppId', (_, game) => resolveSteamAppId(game));
-ipcMain.handle('steam:getGameInfo', (_, game, apiKey) => getSteamGameInfo(game, apiKey));
-ipcMain.handle('steam:getCommunityFeed', (_, games, apiKey) => getSteamCommunityFeed(games, apiKey));
+ipcMain.handle('steam:getGameInfo', (_, game, apiKey, steamId) => getSteamGameInfo(game, apiKey, steamId));
+ipcMain.handle('steam:getCommunityFeed', (_, games, apiKey, steamId) => getSteamCommunityFeed(games, apiKey, steamId));
+ipcMain.handle('steam:getFriends', (_, apiKey, steamId) => getSteamFriends(apiKey, steamId));
+ipcMain.handle('steam:importOwnedGames', (_, apiKey, steamId) => importSteamOwnedGames(apiKey, steamId));
 ipcMain.handle('games:launch', (_, id) => {
   const games = readGames();
   const game = games.find((g) => g.id === id);
@@ -538,7 +684,8 @@ ipcMain.handle('games:launch', (_, id) => {
       }
     }
 
-    const next = games.map((g) => (g.id === id ? { ...g, lastPlayed: '刚刚', isRecent: true } : g));
+    const nowIso = new Date().toISOString();
+    const next = games.map((g) => (g.id === id ? { ...g, lastPlayed: nowIso, isRecent: true } : g));
     writeGames(next);
     return { ok: true };
   } catch (error) {
