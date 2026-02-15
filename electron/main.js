@@ -332,26 +332,46 @@ async function getSteamGameInfo(game, apiKey, steamId) {
     achievementTotal = appData?.achievements?.total ?? null;
   } catch {}
 
+  let achievementSchemaMap = new Map();
+  if (apiKey) {
+    try {
+      const schemaRes = await fetch(`https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=${encodeURIComponent(apiKey)}&appid=${appId}&l=schinese`);
+      const schemaJson = await schemaRes.json();
+      const schemaItems = schemaJson?.game?.availableGameStats?.achievements || [];
+      achievementSchemaMap = new Map(schemaItems.map((item) => [item.name, item]));
+    } catch {}
+  }
+
   let playerAchievement = null;
+  let achievementItems = [];
   if (apiKey && steamId) {
     try {
       const achRes = await fetch(`https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/?key=${encodeURIComponent(apiKey)}&steamid=${encodeURIComponent(steamId)}&appid=${appId}`);
       const achJson = await achRes.json();
       const items = achJson?.playerstats?.achievements || [];
-      const unlocked = items.filter((item) => item.achieved === 1);
-      const rate = items.length ? Math.round((unlocked.length / items.length) * 100) : 0;
+      achievementItems = items.map((item) => {
+        const schema = achievementSchemaMap.get(item.apiname) || {};
+        return {
+          key: item.apiname,
+          achieved: item.achieved === 1,
+          unlockTime: Number(item.unlocktime || 0),
+          title: schema.displayName || item.apiname,
+          description: schema.description || '',
+          icon: schema.icon || '',
+          iconGray: schema.icongray || schema.icon || '',
+          hidden: Number(schema.hidden || 0) === 1,
+        };
+      });
+      const unlocked = achievementItems.filter((item) => item.achieved);
+      const rate = achievementItems.length ? Math.round((unlocked.length / achievementItems.length) * 100) : 0;
       playerAchievement = {
-        total: items.length,
+        total: achievementItems.length,
         unlocked: unlocked.length,
         rate,
         recent: unlocked
-          .filter((item) => Number(item.unlocktime || 0) > 0)
-          .sort((a, b) => Number(b.unlocktime || 0) - Number(a.unlocktime || 0))
-          .slice(0, 8)
-          .map((item) => ({
-            key: item.apiname,
-            unlockTime: item.unlocktime,
-          })),
+          .filter((item) => Number(item.unlockTime || 0) > 0)
+          .sort((a, b) => Number(b.unlockTime || 0) - Number(a.unlockTime || 0))
+          .slice(0, 8),
       };
     } catch {}
   }
@@ -374,6 +394,18 @@ async function getSteamGameInfo(game, apiKey, steamId) {
     currentPlayers,
     achievementTotal,
     playerAchievement,
+    achievements: achievementItems.length
+      ? achievementItems
+      : Array.from(achievementSchemaMap.values()).map((schema) => ({
+        key: schema.name,
+        achieved: false,
+        unlockTime: 0,
+        title: schema.displayName || schema.name,
+        description: schema.description || '',
+        icon: schema.icon || '',
+        iconGray: schema.icongray || schema.icon || '',
+        hidden: Number(schema.hidden || 0) === 1,
+      })),
     news,
     steamUrl: `https://store.steampowered.com/app/${appId}/`,
     steamdbUrl: `https://steamdb.info/app/${appId}/`,
