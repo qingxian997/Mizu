@@ -1,14 +1,32 @@
-const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage } = require('electron');
+/**
+ * Mizu - çŽ°ä»£åŒ–æ¸¸æˆåº“ç®¡ç†å™¨
+ * ä¸»è¿›ç¨‹å…¥å£æ–‡ä»¶
+ * 
+ * åŠŸèƒ½æ¨¡å—ï¼š
+ * - æ¸¸æˆåº“æ•°æ®ç®¡ç†ï¼ˆå¢žåˆ æ”¹æŸ¥ï¼‰
+ * - æ¸¸æˆå¯åŠ¨ä¸Žè·¯å¾„è§£æž
+ * - Steam API é›†æˆ
+ * - ç³»ç»Ÿæ‰˜ç›˜æ”¯æŒ
+ * - AI åŠŸèƒ½é›†æˆ
+ */
+
+const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
+
+// ==================== å¸¸é‡å®šä¹‰ ====================
 
 const DB_FILE = 'games.json';
 const DEFAULT_PORTRAIT_COVER = 'https://images.weserv.nl/?url=store.steampowered.com/public/shared/images/responsive/header_logo.png&w=600&h=900&fit=cover';
 const DEFAULT_LANDSCAPE_COVER = 'https://images.weserv.nl/?url=store.steampowered.com/public/shared/images/header/globalheader_logo.png&w=1280&h=720&fit=cover';
 const WIN_SHORTCUT_EXTENSIONS = new Set(['.lnk', '.url']);
 const WIN_SHELL_EXTENSIONS = new Set(['.bat', '.cmd']);
+const WIN_EXEC_EXTENSIONS = new Set(['.exe', '.msi']);
+
+// ==================== æ•°æ®åº“æ“ä½œ ====================
 
 function getDbPath() {
   return path.join(app.getPath('userData'), DB_FILE);
@@ -26,6 +44,8 @@ function readGames() {
 function writeGames(games) {
   fs.writeFileSync(getDbPath(), JSON.stringify(games, null, 2), 'utf-8');
 }
+
+// ==================== å‘½ä»¤è¡Œè§£æžå·¥å…· ====================
 
 function normalizeArgs(args) {
   if (Array.isArray(args)) return args;
@@ -68,6 +88,8 @@ function splitCommandLine(input) {
   return tokens;
 }
 
+// ==================== Steam AppId è§£æž ====================
+
 function getAppIdFromValue(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
@@ -95,6 +117,10 @@ function resolveLaunchCommand(game) {
 
   const normalizedArgs = normalizeArgs(game.args);
   if (normalizedArgs.length > 0) {
+    return { execPath, args: normalizedArgs };
+  }
+
+  if (fs.existsSync(execPath)) {
     return { execPath, args: normalizedArgs };
   }
 
@@ -131,17 +157,19 @@ function withDefaults(game) {
     color: game.color || 'from-slate-700 via-slate-600 to-slate-900',
     icon: game.icon || 'gamepad-2',
     hours: Number(game.hours || 0),
-    lastPlayed: game.lastPlayed || 'Î´ÔËÐÐ',
+    lastPlayed: game.lastPlayed || '???',
     isRecent: Boolean(game.isRecent),
     isFav: Boolean(game.isFav),
   };
 }
 
+// ==================== æ¸¸æˆæ•°æ®æ ‡å‡†åŒ– ====================
+
 function formatLastPlayed(lastPlayedUnix) {
   const value = Number(lastPlayedUnix || 0);
-  if (!value) return 'Î´ÔËÐÐ';
+  if (!value) return '???';
   const date = new Date(value * 1000);
-  if (Number.isNaN(date.getTime())) return 'Î´ÔËÐÐ';
+  if (Number.isNaN(date.getTime())) return '???';
   return date.toISOString();
 }
 
@@ -153,23 +181,511 @@ function isUriLaunchPath(execPath) {
   return /^steam:\/\//i.test(execPath) || /^https?:\/\//i.test(execPath);
 }
 
+// ==================== æ¸¸æˆå¯åŠ¨åŠŸèƒ½ ====================
+
 function openUri(uri, workingDir = '') {
-  if (process.platform === 'win32') {
-    const commandArgs = ['/c', 'start', ''];
-    if (workingDir) commandArgs.push('/d', workingDir);
-    commandArgs.push(uri);
-    const child = spawn('cmd.exe', commandArgs, { detached: true, stdio: 'ignore', windowsHide: true });
-    child.unref();
-    return;
-  }
-  if (process.platform === 'darwin') {
-    const child = spawn('open', [uri], { detached: true, stdio: 'ignore' });
-    child.unref();
-    return;
-  }
-  const child = spawn('xdg-open', [uri], { detached: true, stdio: 'ignore' });
-  child.unref();
+  shell.openExternal(uri);
 }
+
+function launchShortcut(shortcutPath, workingDir = '') {
+  shell.openPath(shortcutPath);
+  return { ok: true };
+}
+
+function launchExecutable(execPath, args = [], workingDir = '') {
+  shell.openPath(execPath);
+  return { ok: true };
+}
+
+// ==================== æ¸¸æˆå¹³å°é…ç½® ====================
+
+const KNOWN_GAME_LAUNCHERS = [
+  {
+    name: 'Steam',
+    type: 'steam',
+    registryKey: 'HKLM\\SOFTWARE\\WOW6432Node\\Valve\\Steam',
+    registryValue: 'InstallPath',
+    steamAppsDir: 'steamapps',
+    commonDir: 'steamapps\\common',
+  },
+  {
+    name: 'Epic Games',
+    type: 'epic',
+    registryKey: 'HKLM\\SOFTWARE\\WOW6432Node\\Epic Games\\EpicGamesLauncher',
+    registryValue: 'AppDataPath',
+  },
+  {
+    name: 'miHoYo',
+    type: 'mihoyo',
+    possiblePaths: [
+      path.join(process.env.ProgramFiles || 'C:\\Program Files', 'miHoYo Launcher'),
+      path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'miHoYo Launcher'),
+      'D:\\miHoYo Launcher',
+      'C:\\miHoYo Launcher',
+    ],
+    gamesSubdir: 'games',
+  },
+  {
+    name: 'WeGame',
+    type: 'wegame',
+    possiblePaths: [
+      path.join(process.env.ProgramFiles || 'C:\\Program Files', 'WeGame'),
+      path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'WeGame'),
+      'D:\\WeGame',
+    ],
+  },
+];
+
+// ==================== ç›®å½•æ‰«æåŠŸèƒ½ ====================
+
+function scanDirectoryForExecutables(dir, depth = 2) {
+  const results = [];
+  if (!fs.existsSync(dir)) return results;
+  
+  try {
+    const items = fs.readdirSync(dir, { withFileTypes: true });
+    for (const item of items) {
+      const fullPath = path.join(dir, item.name);
+      if (item.isDirectory() && depth > 0) {
+        results.push(...scanDirectoryForExecutables(fullPath, depth - 1));
+      } else if (item.isFile() && path.extname(item.name).toLowerCase() === '.exe') {
+        const stat = fs.statSync(fullPath);
+        if (stat.size > 1024 * 1024) {
+          results.push({
+            name: path.basename(item.name, '.exe'),
+            path: fullPath,
+            size: stat.size,
+          });
+        }
+      }
+    }
+  } catch {}
+  
+  return results;
+}
+
+function getSteamInstallPath() {
+  const possiblePaths = [
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Steam'),
+    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Steam'),
+    'C:\\Steam',
+    'D:\\Steam',
+    'D:\\Games\\Steam',
+  ];
+  
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p) && fs.existsSync(path.join(p, 'steam.exe'))) {
+      return p;
+    }
+  }
+  return null;
+}
+
+function getSteamLibraryPaths(steamPath) {
+  const libraries = [steamPath];
+  const libraryFoldersPath = path.join(steamPath, 'steamapps', 'libraryfolders.vdf');
+  
+  if (fs.existsSync(libraryFoldersPath)) {
+    try {
+      const content = fs.readFileSync(libraryFoldersPath, 'utf-8');
+      const matches = content.matchAll(/"path"\s+"([^"]+)"/gi);
+      for (const match of matches) {
+        const libPath = match[1].replace(/\\\\/g, '\\');
+        if (libPath !== steamPath && fs.existsSync(libPath)) {
+          libraries.push(libPath);
+        }
+      }
+    } catch {}
+  }
+  
+  return libraries;
+}
+
+function scanSteamGames() {
+  const steamPath = getSteamInstallPath();
+  if (!steamPath) return [];
+  
+  const libraries = getSteamLibraryPaths(steamPath);
+  const games = [];
+  
+  for (const libPath of libraries) {
+    const commonPath = path.join(libPath, 'steamapps', 'common');
+    if (!fs.existsSync(commonPath)) continue;
+    
+    try {
+      const gameDirs = fs.readdirSync(commonPath, { withFileTypes: true });
+      for (const gameDir of gameDirs) {
+        if (!gameDir.isDirectory()) continue;
+        
+        const gamePath = path.join(commonPath, gameDir.name);
+        const execs = scanDirectoryForExecutables(gamePath, 1);
+        
+        if (execs.length > 0) {
+          const mainExe = execs.find(e => 
+            e.name.toLowerCase().includes(gameDir.name.toLowerCase().replace(/[^a-z0-9]/gi, '').substring(0, 4)) ||
+            e.name.toLowerCase() === gameDir.name.toLowerCase() ||
+            e.name.toLowerCase() === 'game' ||
+            e.name.toLowerCase().includes('launcher')
+          ) || execs[0];
+          
+          games.push({
+            title: gameDir.name,
+            titleEn: gameDir.name,
+            execPath: mainExe.path,
+            source: 'Steam',
+            coverUrl: '',
+          });
+        }
+      }
+    } catch {}
+  }
+  
+  return games;
+}
+
+function scanMiHoYoGames() {
+  const games = [];
+  const possiblePaths = [
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'miHoYo Launcher'),
+    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'miHoYo Launcher'),
+    'D:\\miHoYo Launcher',
+    'C:\\miHoYo Launcher',
+    'D:\\mihoyo\\miHoYo Launcher',
+    'C:\\mihoyo\\miHoYo Launcher',
+  ];
+  
+  for (const launcherPath of possiblePaths) {
+    if (!fs.existsSync(launcherPath)) continue;
+    
+    const gamesPath = path.join(launcherPath, 'games');
+    if (!fs.existsSync(gamesPath)) continue;
+    
+    try {
+      const gameDirs = fs.readdirSync(gamesPath, { withFileTypes: true });
+      for (const gameDir of gameDirs) {
+        if (!gameDir.isDirectory()) continue;
+        
+        const gamePath = path.join(gamesPath, gameDir.name);
+        const execs = scanDirectoryForExecutables(gamePath, 3);
+        
+        const knownGames = {
+          'Star Rail': ['starrail', 'honkai', 'star'],
+          'Genshin Impact': ['genshin', 'yuanshen'],
+          'Honkai Impact 3rd': ['honkai3', 'bh3'],
+          'Zenless Zone Zero': ['zenless', 'zzz'],
+        };
+        
+        let gameTitle = gameDir.name;
+        for (const [title, keywords] of Object.entries(knownGames)) {
+          if (keywords.some(k => gameDir.name.toLowerCase().includes(k))) {
+            gameTitle = title;
+            break;
+          }
+        }
+        
+        if (execs.length > 0) {
+          const mainExe = execs.find(e => 
+            e.name.toLowerCase().includes('launcher') ||
+            e.name.toLowerCase().includes('game') ||
+            e.name.toLowerCase().includes('starrail') ||
+            e.name.toLowerCase().includes('genshin') ||
+            e.name.toLowerCase().includes('honkai') ||
+            e.name.toLowerCase().includes('zenless')
+          ) || execs.find(e => e.size === Math.max(...execs.map(x => x.size))) || execs[0];
+          
+          games.push({
+            title: gameTitle,
+            titleEn: gameDir.name,
+            execPath: mainExe.path,
+            source: 'miHoYo',
+            coverUrl: '',
+          });
+        }
+      }
+    } catch (err) {
+      console.error('scanMiHoYoGames error:', err);
+    }
+    
+    if (games.length > 0) break;
+  }
+  
+  return games;
+}
+
+function scanEpicGames() {
+  const games = [];
+  const manifestPath = path.join(process.env.ProgramData || 'C:\\ProgramData', 'Epic', 'EpicGamesLauncher', 'Data', 'Manifests');
+  
+  if (!fs.existsSync(manifestPath)) return games;
+  
+  try {
+    const files = fs.readdirSync(manifestPath);
+    for (const file of files) {
+      if (!file.endsWith('.item')) continue;
+      
+      try {
+        const filePath = path.join(manifestPath, file);
+        const content = fs.readFileSync(filePath, 'utf-8');
+        
+        let manifest;
+        try {
+          manifest = JSON.parse(content);
+        } catch {
+          const appNameMatch = content.match(/"AppName"\s*"([^"]+)"/);
+          const displayNameMatch = content.match(/"DisplayName"\s*"([^"]+)"/);
+          const installLocationMatch = content.match(/"InstallLocation"\s*"([^"]+)"/);
+          
+          if (displayNameMatch && installLocationMatch) {
+            manifest = {
+              DisplayName: displayNameMatch[1],
+              InstallLocation: installLocationMatch[1].replace(/\\\\/g, '\\'),
+            };
+          }
+        }
+        
+        if (!manifest || !manifest.InstallLocation) continue;
+        
+        const installLocation = manifest.InstallLocation;
+        if (!fs.existsSync(installLocation)) continue;
+        
+        const execs = scanDirectoryForExecutables(installLocation, 3);
+        if (execs.length === 0) continue;
+        
+        const title = manifest.DisplayName || path.basename(installLocation);
+        
+        const mainExe = execs.find(e => {
+          const nameLower = e.name.toLowerCase();
+          const titleLower = title.toLowerCase();
+          return nameLower.includes(titleLower.substring(0, Math.min(5, titleLower.length))) ||
+                 nameLower.includes('game') ||
+                 nameLower.includes('launcher') ||
+                 nameLower.includes('win64') ||
+                 nameLower.includes('win32');
+        }) || execs.find(e => e.size === Math.max(...execs.map(x => x.size))) || execs[0];
+        
+        games.push({
+          title: title,
+          titleEn: title,
+          execPath: mainExe.path,
+          source: 'Epic Games',
+          coverUrl: '',
+        });
+      } catch (err) {
+        console.error('Epic manifest parse error:', err);
+      }
+    }
+  } catch (err) {
+    console.error('scanEpicGames error:', err);
+  }
+  
+  return games;
+}
+
+function scanWeGameGames() {
+  const games = [];
+  const possiblePaths = [
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'WeGame'),
+    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'WeGame'),
+    'D:\\WeGame',
+  ];
+  
+  for (const wegamePath of possiblePaths) {
+    if (!fs.existsSync(wegamePath)) continue;
+    
+    const appsPath = path.join(wegamePath, 'apps');
+    if (!fs.existsSync(appsPath)) continue;
+    
+    try {
+      const gameDirs = fs.readdirSync(appsPath, { withFileTypes: true });
+      for (const gameDir of gameDirs) {
+        if (!gameDir.isDirectory()) continue;
+        
+        const gamePath = path.join(appsPath, gameDir.name);
+        const execs = scanDirectoryForExecutables(gamePath, 2);
+        
+        if (execs.length > 0) {
+          const mainExe = execs.find(e => 
+            e.name.toLowerCase().includes(gameDir.name.toLowerCase().substring(0, 4)) ||
+            e.name.toLowerCase().includes('game')
+          ) || execs[0];
+          
+          games.push({
+            title: gameDir.name,
+            titleEn: gameDir.name,
+            execPath: mainExe.path,
+            source: 'WeGame',
+            coverUrl: '',
+          });
+        }
+      }
+    } catch {}
+    
+    if (games.length > 0) break;
+  }
+  
+  return games;
+}
+
+async function scanInstalledGames() {
+  const allGames = [];
+  
+  const steamGames = scanSteamGames();
+  allGames.push(...steamGames);
+  
+  const mihoyoGames = scanMiHoYoGames();
+  allGames.push(...mihoyoGames);
+  
+  const epicGames = scanEpicGames();
+  allGames.push(...epicGames);
+  
+  const wegameGames = scanWeGameGames();
+  allGames.push(...wegameGames);
+  
+  const seen = new Set();
+  return allGames.filter(game => {
+    const key = game.execPath.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function scanAllInstalledPrograms(customDirs = []) {
+  const programs = [];
+  const seenPaths = new Set();
+  const seenNames = new Set();
+  
+  const defaultDirs = [
+    'C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs',
+    path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+  ];
+  
+  const programDirs = customDirs.length > 0 ? customDirs : defaultDirs;
+  
+  const excludePatterns = [
+    /unins/i,
+    /setup\.exe$/i,
+    /install\.exe$/i,
+    /update\.exe$/i,
+    /helper\.exe$/i,
+    /crash/i,
+    /report/i,
+    /config\.exe$/i,
+    /settings\.exe$/i,
+    /options\.exe$/i,
+    /readme/i,
+    /license/i,
+    /eula/i,
+    /manual/i,
+    /documentation/i,
+    /\.chm$/i,
+    /\.hlp$/i,
+    /\.dll$/i,
+    /\.sys$/i,
+    /uninstall/i,
+    /remove/i,
+    /repair/i,
+    /modify\.exe$/i,
+    /vc_redist/i,
+    /vcredist/i,
+    /dotnet/i,
+    /directx/i,
+    /windows\s*installer/i,
+  ];
+  
+  function normalizeTitle(title) {
+    return title.toLowerCase()
+      .replace(/[:\-_\(\)\[\]]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  
+  for (const dir of programDirs) {
+    if (!fs.existsSync(dir)) continue;
+    
+    try {
+      const scanDir = (currentPath, depth = 0) => {
+        if (depth > 4) return;
+        
+        let entries;
+        try {
+          entries = fs.readdirSync(currentPath, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        
+        for (const entry of entries) {
+          const fullPath = path.join(currentPath, entry.name);
+          
+          if (entry.isDirectory()) {
+            scanDir(fullPath, depth + 1);
+            continue;
+          }
+          
+          const ext = path.extname(entry.name).toLowerCase();
+          if (!['.exe', '.lnk'].includes(ext)) continue;
+          
+          let execPath = fullPath;
+          let title = entry.name.replace(/\.(exe|lnk)$/i, '');
+          
+          if (ext === '.lnk') {
+            try {
+              const shortcut = readShortcut(fullPath);
+              if (shortcut && shortcut.targetPath) {
+                const targetExt = path.extname(shortcut.targetPath).toLowerCase();
+                if (targetExt === '.exe' && fs.existsSync(shortcut.targetPath)) {
+                  execPath = shortcut.targetPath;
+                } else {
+                  continue;
+                }
+              } else {
+                continue;
+              }
+            } catch {
+              continue;
+            }
+          }
+          
+          const execLower = execPath.toLowerCase();
+          const execName = path.basename(execPath).toLowerCase();
+          
+          if (excludePatterns.some(p => p.test(execLower) || p.test(execName))) continue;
+          if (seenPaths.has(execLower)) continue;
+          
+          const normalizedTitle = normalizeTitle(title);
+          if (seenNames.has(normalizedTitle)) continue;
+          
+          seenPaths.add(execLower);
+          seenNames.add(normalizedTitle);
+          
+          programs.push({
+            title: title,
+            titleEn: title,
+            execPath: execPath,
+            source: 'Installed Program',
+            coverUrl: '',
+            iconPath: execPath,
+          });
+        }
+      };
+      
+      scanDir(dir, 0);
+    } catch (err) {
+      console.error('scanAllInstalledPrograms error:', err);
+    }
+  }
+  
+  return programs;
+}
+
+ipcMain.handle('programs:scanAll', (_, customDirs) => {
+  try {
+    const programs = scanAllInstalledPrograms(customDirs);
+    return { ok: true, programs };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
 
 async function resolveSteamAppIdByTitle(title) {
   const query = String(title || '').trim();
@@ -306,7 +822,7 @@ async function getSteamGameInfo(game, apiKey, steamId) {
     return {
       found: false,
       title,
-      message: 'Î´ÔÚ Steam ÉÏÆ¥Åäµ½¸ÃÓÎÏ·¡£',
+      message: 'æœªåœ¨ Steam æ‰¾åˆ°è¯¥æ¸¸æˆ',
       steamdbUrl: `https://steamdb.info/search/?a=app&q=${encodeURIComponent(title)}`,
     };
   }
@@ -383,17 +899,34 @@ async function getSteamGameInfo(game, apiKey, steamId) {
     news = newsJson?.appnews?.newsitems || [];
   } catch {}
 
+  let playtime_forever = null;
+  let lastPlayed = null;
+  if (apiKey && steamId) {
+    try {
+      const ownedRes = await fetch(`https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=${encodeURIComponent(apiKey)}&steamid=${encodeURIComponent(steamId)}&include_played_free_games=1&include_appinfo=true`);
+      const ownedJson = await ownedRes.json();
+      const games = ownedJson?.response?.games || [];
+      const gameData = games.find(g => String(g.appid) === String(appId));
+      if (gameData) {
+        playtime_forever = gameData.playtime_forever || 0;
+        lastPlayed = gameData.rtime_last_played ? new Date(gameData.rtime_last_played * 1000).toISOString() : null;
+      }
+    } catch {}
+  }
+
   return {
     found: true,
     appId,
     title: appData?.name || title,
     headerImage: appData?.header_image || `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
-    shortDescription: appData?.short_description || 'ÔÝÎÞ¼ò½é¡£',
+    shortDescription: appData?.short_description || 'æš‚æ— ç®€ä»‹',
     genres: (appData?.genres || []).map((g) => g.description).slice(0, 4),
-    price: appData?.price_overview?.final_formatted || '¼Û¸ñÐÅÏ¢ÔÝ²»¿ÉÓÃ',
+    price: appData?.price_overview?.final_formatted || 'æœªçŸ¥ä»·æ ¼',
     currentPlayers,
     achievementTotal,
     playerAchievement,
+    playtime_forever,
+    lastPlayed,
     achievements: achievementItems.length
       ? achievementItems
       : Array.from(achievementSchemaMap.values()).map((schema) => ({
@@ -467,9 +1000,9 @@ async function getSteamCommunityFeed(games, apiKey, steamId) {
           currentPlayers: null,
           news: [{
             gid: `recent-${game.appid}`,
-            title: `Äã×î½üÓÎÍæÁË ${Math.round((game.playtime_2weeks || 0) / 60)} Ð¡Ê±`,
+            title: `æœ€è¿‘ä¸¤å‘¨æ¸¸çŽ© ${Math.round((game.playtime_2weeks || 0) / 60)} å°æ—¶`,
             url: `https://store.steampowered.com/app/${game.appid}/`,
-            excerpt: `¹ýÈ¥Á½ÖÜÓÎÍæ ${Math.round((game.playtime_2weeks || 0) / 60)} Ð¡Ê±£¬×ÜÊ±³¤ ${Math.round((game.playtime_forever || 0) / 60)} Ð¡Ê±¡£`,
+            excerpt: `æœ€è¿‘ä¸¤å‘¨æ¸¸çŽ© ${Math.round((game.playtime_2weeks || 0) / 60)} å°æ—¶ï¼Œæ€»è®¡ ${Math.round((game.playtime_forever || 0) / 60)} å°æ—¶`,
             author: 'Steam',
             date: Math.floor(Date.now() / 1000),
             feedlabel: 'recent_playtime',
@@ -487,19 +1020,30 @@ async function getSteamFriends(apiKey, steamId) {
   try {
     const listRes = await fetch(`https://api.steampowered.com/ISteamUser/GetFriendList/v1/?key=${encodeURIComponent(apiKey)}&steamid=${encodeURIComponent(steamId)}&relationship=friend`);
     const listJson = await listRes.json();
-    const friendIds = (listJson?.friendslist?.friends || []).map((item) => item.steamid).slice(0, 50);
+    const friendsList = listJson?.friendslist?.friends || [];
+    const friendIds = friendsList.map((item) => item.steamid).slice(0, 100);
     if (!friendIds.length) return [];
 
     const summaryRes = await fetch(`https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${encodeURIComponent(apiKey)}&steamids=${friendIds.join(',')}`);
     const summaryJson = await summaryRes.json();
+    
+    const friendMap = new Map(friendsList.map(f => [f.steamid, f]));
+    
     return (summaryJson?.response?.players || []).map((player) => {
       const status = Number(player.personastate || 0) > 0 ? 'online' : 'offline';
+      const friendInfo = friendMap.get(player.steamid) || {};
+      const isPlaying = !!player.gameextrainfo;
       return {
         id: player.steamid,
         name: player.personaname,
+        realName: player.realname || '',
         status,
-        game: player.gameextrainfo ? `ÔÚÏß ¡¤ ${player.gameextrainfo}` : (status === 'online' ? 'ÔÚÏß' : 'ÀëÏß'),
+        isPlaying,
+        game: player.gameextrainfo || '',
+        gameAppId: player.gameid || null,
         avatar: player.avatarmedium || player.avatarfull || '',
+        friendSince: friendInfo.friend_since || 0,
+        lastOnline: player.lastlogoff || 0,
       };
     });
   } catch {
@@ -507,16 +1051,130 @@ async function getSteamFriends(apiKey, steamId) {
   }
 }
 
+async function getSteamFriendsActivities(apiKey, steamId) {
+  if (!apiKey || !steamId) return [];
+  const activities = [];
+  
+  try {
+    const listRes = await fetch(`https://api.steampowered.com/ISteamUser/GetFriendList/v1/?key=${encodeURIComponent(apiKey)}&steamid=${encodeURIComponent(steamId)}&relationship=friend`);
+    const listJson = await listRes.json();
+    const friendsList = listJson?.friendslist?.friends || [];
+    const friendIds = friendsList.map((item) => item.steamid).slice(0, 30);
+    if (!friendIds.length) return [];
+
+    const summaryRes = await fetch(`https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${encodeURIComponent(apiKey)}&steamids=${friendIds.join(',')}`);
+    const summaryJson = await summaryRes.json();
+    const players = summaryJson?.response?.players || [];
+
+    for (const player of players) {
+      const friendSteamId = player.steamid;
+      const friendName = player.personaname;
+      const friendRealName = player.realname || '';
+      const friendAvatar = player.avatarmedium || player.avatarfull || '';
+
+      if (player.gameextrainfo) {
+        activities.push({
+          type: 'playing',
+          friendId: friendSteamId,
+          friendName,
+          friendRealName,
+          friendAvatar,
+          game: player.gameextrainfo,
+          gameAppId: player.gameid || null,
+          timestamp: Date.now(),
+        });
+      }
+
+      try {
+        const recentRes = await fetch(`https://api.steampowered.com/IPlayerService/GetRecentlyPlayedGames/v1/?key=${encodeURIComponent(apiKey)}&steamid=${friendSteamId}&count=5`);
+        const recentJson = await recentRes.json();
+        const recentGames = recentJson?.response?.games || [];
+        
+        for (const game of recentGames) {
+          const isNewGame = (game.playtime_forever || 0) < 60;
+          
+          if (isNewGame) {
+            activities.push({
+              type: 'first_play',
+              friendId: friendSteamId,
+              friendName,
+              friendRealName,
+              friendAvatar,
+              game: game.name,
+              gameAppId: game.appid,
+              timestamp: (game.rtime_last_played || 0) * 1000 || Date.now(),
+            });
+          }
+
+          try {
+            const achieveRes = await fetch(`https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/?key=${encodeURIComponent(apiKey)}&steamid=${friendSteamId}&appid=${game.appid}`);
+            const achieveJson = await achieveRes.json();
+            const achievements = achieveJson?.playerstats?.achievements || [];
+            
+            const recentAchievements = achievements
+              .filter(a => a.achieved === 1 && a.unlocktime > 0)
+              .sort((a, b) => b.unlocktime - a.unlocktime)
+              .slice(0, 2);
+            
+            for (const ach of recentAchievements) {
+              const unlockTime = ach.unlocktime * 1000;
+              if (Date.now() - unlockTime < 14 * 24 * 60 * 60 * 1000) {
+                activities.push({
+                  type: 'achievement',
+                  friendId: friendSteamId,
+                  friendName,
+                  friendRealName,
+                  friendAvatar,
+                  game: game.name,
+                  gameAppId: game.appid,
+                  achievement: ach.apiname || 'Achievement',
+                  timestamp: unlockTime,
+                });
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+
+    activities.sort((a, b) => b.timestamp - a.timestamp);
+  } catch {
+    return [];
+  }
+  
+  return activities.slice(0, 50);
+}
+
+async function getSteamUserInfo(apiKey, steamId) {
+  if (!apiKey || !steamId) return null;
+  try {
+    const res = await fetch(`https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${encodeURIComponent(apiKey)}&steamids=${steamId}`);
+    const json = await res.json();
+    const player = json?.response?.players?.[0];
+    if (!player) return null;
+    return {
+      id: player.steamid,
+      name: player.personaname,
+      realName: player.realname || '',
+      avatar: player.avatarfull || player.avatarmedium || '',
+      status: Number(player.personastate || 0) > 0 ? 'online' : 'offline',
+      game: player.gameextrainfo || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function importSteamOwnedGames(apiKey, steamId) {
   if (!apiKey || !steamId) {
-    return { ok: false, error: 'ÇëÏÈÌîÐ´ Steam API Key Óë SteamID64' };
+    return { ok: false, error: 'ç¼ºå°‘ Steam API Key æˆ– SteamID64' };
   }
 
   try {
     const res = await fetch(`https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=${encodeURIComponent(apiKey)}&steamid=${encodeURIComponent(steamId)}&include_appinfo=1&include_played_free_games=1&format=json`);
     const payload = await res.json();
     const owned = payload?.response?.games || [];
-    if (!owned.length) return { ok: false, error: 'Î´»ñÈ¡µ½¿Éµ¼ÈëµÄ Steam ÓÎÏ·' };
+    if (!owned.length) return { ok: false, error: 'æœªèƒ½èŽ·å–åˆ°å·²æ‹¥æœ‰çš„ Steam æ¸¸æˆ' };
 
     const games = readGames();
     const byAppId = new Map(games.map((g) => [String(g.steamAppId || ''), g]));
@@ -550,7 +1208,7 @@ async function importSteamOwnedGames(apiKey, steamId) {
           coverUrl: existing.coverUrl || basePayload.coverUrl,
           landscapeCoverUrl: existing.landscapeCoverUrl || basePayload.landscapeCoverUrl,
           hours: Math.max(Number(existing.hours || 0), Number(basePayload.hours || 0)),
-          lastPlayed: basePayload.lastPlayed === 'Î´ÔËÐÐ' ? existing.lastPlayed : basePayload.lastPlayed,
+          lastPlayed: basePayload.lastPlayed === '???' ? existing.lastPlayed : basePayload.lastPlayed,
           isRecent: existing.isRecent || basePayload.isRecent,
         });
         const index = games.findIndex((g) => g.id === existing.id);
@@ -565,14 +1223,17 @@ async function importSteamOwnedGames(apiKey, steamId) {
     writeGames(games);
     return { ok: true, added, updated, total: games.length };
   } catch (error) {
-    return { ok: false, error: error.message || 'µ¼ÈëÊ§°Ü' };
+    return { ok: false, error: error.message || 'æœªçŸ¥é”™è¯¯' };
   }
 }
+
+// ==================== çª—å£ä¸Žæ‰˜ç›˜ç®¡ç† ====================
 
 function createWindow() {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
+    title: 'Mizu',
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -611,11 +1272,11 @@ function hideToTray() {
 
 function createTray() {
   tray = new Tray(getTrayIcon());
-  tray.setToolTip('Steam ÓÎÏ·¿â');
+  tray.setToolTip('Mizu - æ¸¸æˆåº“');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: '´ò¿ªÖ÷½çÃæ', click: showMainWindow },
+    { label: 'æ˜¾ç¤ºä¸»çª—å£', click: showMainWindow },
     {
-      label: 'ÍË³ö', click: () => {
+      label: 'é€€å‡º', click: () => {
         forceQuit = true;
         app.quit();
       },
@@ -627,9 +1288,14 @@ function createTray() {
 ipcMain.handle('games:get', () => readGames());
 ipcMain.handle('games:add', (_, game) => {
   const payload = withDefaults(game);
-  if (!payload.title && !payload.titleEn) return { ok: false, error: 'ÖÐÎÄÃûºÍÓ¢ÎÄÃûÖÁÉÙÌîÐ´Ò»¸ö' };
-  if (!payload.execPath) return { ok: false, error: 'Æô¶¯Â·¾¶²»ÄÜÎª¿Õ' };
+  if (!payload.title && !payload.titleEn) return { ok: false, error: 'è¯·æä¾›æ¸¸æˆåç§°ï¼Œä¸­æ–‡æˆ–è‹±æ–‡è‡³å°‘å¡«å†™ä¸€é¡¹' };
+  if (!payload.execPath) return { ok: false, error: 'è¯·æŒ‡å®šå¯æ‰§è¡Œè·¯å¾„' };
   const games = readGames();
+  const normalizedExecPath = payload.execPath.toLowerCase();
+  const existingByPath = games.find(g => (g.execPath || '').toLowerCase() === normalizedExecPath);
+  if (existingByPath) {
+    return { ok: true, game: existingByPath, duplicate: true };
+  }
   const next = [...games, payload];
   writeGames(next);
   return { ok: true, game: payload };
@@ -650,6 +1316,51 @@ ipcMain.handle('games:remove', (_, id) => {
   writeGames(next);
   return true;
 });
+ipcMain.handle('games:reorder', (_, orderedIds) => {
+  if (!Array.isArray(orderedIds)) return { ok: false, error: 'æ— æ•ˆçš„é¡ºåºæ•°æ®' };
+  const games = readGames();
+  const idToGame = new Map(games.map(g => [g.id, g]));
+  const reordered = [];
+  for (const id of orderedIds) {
+    const game = idToGame.get(id);
+    if (game) {
+      reordered.push(game);
+      idToGame.delete(id);
+    }
+  }
+  reordered.push(...idToGame.values());
+  writeGames(reordered);
+  return { ok: true };
+});
+
+// ==================== ç³»ç»Ÿä¿¡æ¯èŽ·å– ====================
+
+function getDiskSpace() {
+  const drives = [];
+  try {
+    const execSync = require('child_process').execSync;
+    const output = execSync('powershell -Command "Get-CimInstance Win32_LogicalDisk | Where-Object {$_.DriveType -eq 3} | Select-Object DeviceID,Size,FreeSpace | ConvertTo-Json"', { encoding: 'utf8' });
+    const parsed = JSON.parse(output);
+    const diskList = Array.isArray(parsed) ? parsed : [parsed];
+    for (const disk of diskList) {
+      if (disk && disk.DeviceID && disk.Size > 0) {
+        drives.push({
+          drive: disk.DeviceID,
+          free: disk.FreeSpace || 0,
+          total: disk.Size,
+          used: disk.Size - (disk.FreeSpace || 0),
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Failed to get disk space:', err);
+  }
+  return drives;
+}
+
+// ==================== IPC å¤„ç†å™¨ ====================
+
+ipcMain.handle('system:getDiskSpace', () => getDiskSpace());
 ipcMain.handle('games:pickDirectory', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory'],
@@ -661,8 +1372,8 @@ ipcMain.handle('games:pickExecutable', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     filters: [
-      { name: 'Ó¦ÓÃ³ÌÐò', extensions: ['exe', 'bat', 'cmd', 'app', 'sh', 'lnk', 'url'] },
-      { name: 'ËùÓÐÎÄ¼þ', extensions: ['*'] },
+      { name: 'å¯æ‰§è¡Œæ–‡ä»¶', extensions: ['exe', 'bat', 'cmd', 'app', 'sh', 'lnk', 'url'] },
+      { name: 'æ‰€æœ‰æ–‡ä»¶', extensions: ['*'] },
     ],
   });
   if (result.canceled || !result.filePaths.length) return '';
@@ -672,8 +1383,8 @@ ipcMain.handle('games:pickCoverFile', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     filters: [
-      { name: 'Í¼Æ¬', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] },
-      { name: 'ËùÓÐÎÄ¼þ', extensions: ['*'] },
+      { name: 'å›¾ç‰‡', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] },
+      { name: 'æ‰€æœ‰æ–‡ä»¶', extensions: ['*'] },
     ],
   });
   if (result.canceled || !result.filePaths.length) return '';
@@ -686,33 +1397,47 @@ ipcMain.handle('games:resolveSteamAppId', (_, game) => resolveSteamAppId(game));
 ipcMain.handle('steam:getGameInfo', (_, game, apiKey, steamId) => getSteamGameInfo(game, apiKey, steamId));
 ipcMain.handle('steam:getCommunityFeed', (_, games, apiKey, steamId) => getSteamCommunityFeed(games, apiKey, steamId));
 ipcMain.handle('steam:getFriends', (_, apiKey, steamId) => getSteamFriends(apiKey, steamId));
+ipcMain.handle('steam:getUserInfo', (_, apiKey, steamId) => getSteamUserInfo(apiKey, steamId));
+ipcMain.handle('steam:getFriendsActivities', (_, apiKey, steamId) => getSteamFriendsActivities(apiKey, steamId));
 ipcMain.handle('steam:importOwnedGames', (_, apiKey, steamId) => importSteamOwnedGames(apiKey, steamId));
+ipcMain.handle('games:scanInstalled', async () => {
+  try {
+    const games = await scanInstalledGames();
+    return { ok: true, games };
+  } catch (error) {
+    return { ok: false, error: error.message || 'æœªçŸ¥é”™è¯¯', games: [] };
+  }
+});
 ipcMain.handle('games:launch', (_, id) => {
   const games = readGames();
   const game = games.find((g) => g.id === id);
-  if (!game) return { ok: false, error: 'ÓÎÏ·²»´æÔÚ' };
+  if (!game) return { ok: false, error: 'æœªæ‰¾åˆ°å¯¹åº”æ¸¸æˆ' };
 
   try {
     const launch = resolveLaunchCommand(game);
     const workingDir = normalizeWorkingDir(game.workingDir, launch.execPath);
-    if (workingDir && !fs.existsSync(workingDir)) return { ok: false, error: '¹¤×÷Ä¿Â¼²»´æÔÚ' };
+    
+    if (workingDir && !fs.existsSync(workingDir)) {
+      return { ok: false, error: 'å·¥ä½œç›®å½•ä¸å­˜åœ¨' };
+    }
 
     if (isUriLaunchPath(launch.execPath)) {
       openUri(launch.execPath, workingDir);
     } else {
-      if (!launch.execPath || !fs.existsSync(launch.execPath)) return { ok: false, error: 'ÓÎÏ·Â·¾¶²»´æÔÚ' };
+      if (!launch.execPath) {
+        return { ok: false, error: 'æ‰§è¡Œè·¯å¾„ä¸ºç©º' };
+      }
+      
+      if (!fs.existsSync(launch.execPath)) {
+        return { ok: false, error: 'å¯æ‰§è¡Œæ–‡ä»¶ä¸å­˜åœ¨' };
+      }
+      
       const ext = path.extname(launch.execPath).toLowerCase();
+      
       if (process.platform === 'win32' && WIN_SHORTCUT_EXTENSIONS.has(ext)) {
-        openUri(launch.execPath, workingDir);
+        launchShortcut(launch.execPath, workingDir);
       } else {
-        const child = spawn(launch.execPath, launch.args || [], {
-          cwd: workingDir || path.dirname(launch.execPath),
-          detached: true,
-          stdio: 'ignore',
-          shell: process.platform === 'win32' && WIN_SHELL_EXTENSIONS.has(ext),
-          windowsHide: true,
-        });
-        child.unref();
+        launchExecutable(launch.execPath, launch.args || [], workingDir);
       }
     }
 
@@ -721,7 +1446,7 @@ ipcMain.handle('games:launch', (_, id) => {
     writeGames(next);
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: error.message || 'Æô¶¯Ê§°Ü' };
+    return { ok: false, error: error.message || 'æœªçŸ¥é”™è¯¯' };
   }
 });
 

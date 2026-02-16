@@ -130,10 +130,15 @@
         .tab-btn.active-tab { color: var(--primary-color); }
         .tab-btn.active-tab span { background-color: var(--primary-color); box-shadow: 0 -2px 6px rgba(var(--primary-rgb), 0.4); }
 
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.1); border-radius: 20px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(0,0,0,0.2); }
+        .custom-scrollbar::-webkit-scrollbar-corner { background: transparent; }
+
+        .drag-over-left { box-shadow: -4px 0 0 0 var(--primary-color) !important; }
+        .drag-over-right { box-shadow: 4px 0 0 0 var(--primary-color) !important; }
+        [data-game-id] { transition: box-shadow 0.15s ease; }
 
         .achievement-item.locked img { filter: grayscale(1) brightness(0.55); }
         .achievement-item.unlocked img { filter: grayscale(0) brightness(1); }
@@ -151,12 +156,16 @@
         .title-marquee { overflow: hidden; white-space: nowrap; }
         .title-marquee-inner { display: inline-block; min-width: 100%; }
         .title-marquee.should-marquee .title-marquee-inner {
-            padding-right: 1.5rem;
-            animation: title-marquee-scroll 8s linear infinite;
+            display: inline-flex;
+            animation: title-marquee-scroll 12s linear infinite;
+        }
+        .title-marquee.should-marquee .title-marquee-inner span {
+            padding-right: 4rem;
+            flex-shrink: 0;
         }
         @keyframes title-marquee-scroll {
-            0%, 16% { transform: translateX(0); }
-            84%, 100% { transform: translateX(-40%); }
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
         }
         body.cover-title-hidden .game-cover-title { display: none; }
 
@@ -266,7 +275,7 @@
             </div>
             
             <div class="my-4 border-t border-black/5 mx-4"></div>
-            <div class="px-4 mb-2 text-xs font-bold text-slate-500 uppercase tracking-wider">已安装</div>
+            <div class="px-4 mb-2 text-xs font-bold text-slate-500 uppercase tracking-wider">最近游戏</div>
             <div id="sidebar-games" class="space-y-1"></div>
         </aside>
 
@@ -297,8 +306,11 @@
                                         <button id="detail-launch-btn" class="px-10 py-4 bg-white text-slate-900 rounded-2xl font-bold text-lg hover:bg-blue-50 hover:scale-105 transition-all shadow-lg flex items-center gap-3">
                                             <i data-lucide="play" class="fill-current w-5 h-5"></i> 开始游戏
                                         </button>
+                                        <button id="detail-sync-steam-btn" class="px-6 py-4 bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-2xl font-bold text-lg hover:bg-white/20 transition-all flex items-center gap-3" title="同步Steam游玩时间">
+                                            <i data-lucide="refresh-cw" class="w-5 h-5"></i> 同步Steam
+                                        </button>
                                         <button id="detail-ai-insight-btn" class="px-6 py-4 bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-2xl font-bold text-lg hover:bg-white/20 transition-all flex items-center gap-3">
-                                            <i data-lucide="sparkles" class="w-5 h-5"></i> AI 战术分析
+                                            <i data-lucide="sparkles" class="w-5 h-5"></i> AI分析
                                         </button>
                                         <button id="detail-fav-btn" class="p-4 bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-2xl hover:bg-white/20 transition-all" onclick="window.toggleDetailFavorite()">
                                             <i data-lucide="star" class="w-6 h-6"></i>
@@ -314,19 +326,32 @@
                     <div class="lg:col-span-2 space-y-8">
                         <div class="glass-panel p-6">
                             <div class="flex items-center justify-between mb-4">
-                                <h3 class="font-bold text-xl">我的成就</h3>
+                                <div class="flex items-center gap-2">
+                                    <h3 class="font-bold text-xl">我的成就</h3>
+                                    <button id="achievement-refresh-btn" class="p-1 rounded-full hover:bg-black/5 transition-colors" title="刷新成就">
+                                        <i data-lucide="refresh-cw" class="w-4 h-4 text-slate-500"></i>
+                                    </button>
+                                </div>
                                 <div id="achievement-progress" class="text-xs text-slate-500">未同步 Steam</div>
                             </div>
-                            <div id="achievement-recent-list" class="flex gap-4 overflow-x-auto pb-2">
+                            <div id="achievement-recent-list" class="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
                                 <div class="text-sm text-slate-500">打开 Steam API 后可查看你自己的成就解锁进度。</div>
                             </div>
                         </div>
                     </div>
                     <div class="space-y-8">
                          <div class="glass-panel p-6">
-                            <h3 class="font-bold text-xl mb-4">更新新闻</h3>
-                            <div class="space-y-4">
-                                <div class="group cursor-pointer"><div class="text-sm text-slate-500 mb-1">今天</div><div class="font-medium hover:theme-text transition-colors">补丁说明 v1.05</div></div>
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center gap-2">
+                                    <h3 class="font-bold text-xl">更新新闻</h3>
+                                    <button id="news-refresh-btn" class="p-1 rounded-full hover:bg-black/5 transition-colors" title="刷新新闻">
+                                        <i data-lucide="refresh-cw" class="w-4 h-4 text-slate-500"></i>
+                                    </button>
+                                </div>
+                                <span class="text-xs text-slate-500">数据来源: Steam</span>
+                            </div>
+                            <div id="game-news-list" class="space-y-4">
+                                <div class="text-sm text-slate-500">请打开游戏详情页查看 Steam 新闻。</div>
                             </div>
                         </div>
                     </div>
@@ -348,14 +373,27 @@
                 <div class="flex-1 glass-panel p-8 h-fit min-h-[500px]">
                     <!-- Account -->
                     <div id="settings-account" class="settings-content-panel space-y-6">
-                        <h3 class="text-2xl font-bold mb-6">账户详情</h3>
-                        <div class="flex items-center gap-6 mb-8 p-6 bg-white/40 rounded-2xl border border-white/50">
-                            <div class="w-20 h-20 rounded-full text-white flex items-center justify-center text-3xl font-bold shadow-lg ring-4 ring-white/50 theme-bg">G</div>
+                        <h3 class="text-2xl font-bold mb-6">Steam 账户</h3>
+                        <div id="steam-account-panel" class="flex items-center gap-6 mb-8 p-6 bg-white/40 rounded-2xl border border-white/50">
+                            <div id="steam-avatar" class="w-20 h-20 rounded-full text-white flex items-center justify-center text-3xl font-bold shadow-lg ring-4 ring-white/50 theme-bg">?</div>
                             <div>
-                                <h3 class="text-2xl font-bold">Gamer_001</h3>
-                                <p class="text-slate-500 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-green-500"></span> 在线</p>
+                                <h3 id="steam-display-name" class="text-2xl font-bold">未登录</h3>
+                                <p id="steam-status" class="text-slate-500 flex items-center gap-2"><span id="steam-status-dot" class="w-2 h-2 rounded-full bg-slate-400"></span> <span id="steam-status-text">请配置 Steam API</span></p>
                                 <p id="last-startup-time" class="text-xs text-slate-500 mt-2">上次启动：未记录</p>
                             </div>
+                        </div>
+                        
+                        <!-- Steam API Settings -->
+                        <div class="p-5 bg-white/40 rounded-2xl border border-white/50 space-y-3">
+                            <h4 class="font-bold text-slate-700">Steam API 设置</h4>
+                            <p class="text-xs text-slate-500">用于同步 Steam 成就、游玩时间、好友状态、动态与游戏库导入。</p>
+                            <input id="steam-api-key-input" type="password" placeholder="请输入 Steam Web API Key" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm theme-ring" />
+                            <input id="steam-id-input" type="text" placeholder="请输入你的 SteamID64" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm theme-ring" />
+                            <div class="flex gap-2 flex-wrap">
+                                <button id="save-steam-api-key-btn" class="px-4 py-2 text-white text-sm rounded-lg theme-bg theme-hover">保存 Steam 信息</button>
+                                <button id="import-steam-games-btn" class="px-4 py-2 text-sm rounded-lg bg-white border border-white/70 hover:bg-white/90">导入 Steam 游戏</button>
+                            </div>
+                            <div class="text-xs text-slate-500">申请地址：<a class="underline theme-text" href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noreferrer">steamcommunity.com/dev/apikey</a></div>
                         </div>
                     </div>
 
@@ -448,14 +486,12 @@
                         </div>
                     </div>
                     
-                    <!-- Storage (Placeholder) -->
+                    <!-- Storage -->
                     <div id="settings-storage" class="settings-content-panel hidden space-y-6">
                         <h3 class="text-2xl font-bold mb-6">存储管理</h3>
-                        <div class="h-4 bg-slate-200 rounded-full overflow-hidden flex mb-2">
-                            <div class="w-[60%] h-full theme-bg"></div>
-                            <div class="w-[20%] bg-gray-400 h-full"></div>
+                        <div id="disk-space-container" class="space-y-4">
+                            <div class="text-sm text-slate-500">正在获取磁盘信息...</div>
                         </div>
-                        <div class="flex justify-between text-sm text-slate-500"><span>已用: 600GB</span><span>剩余: 400GB</span></div>
                     </div>
                 </div>
             </div>
@@ -465,8 +501,13 @@
                 <div class="flex-1 space-y-6 overflow-y-auto custom-scrollbar pr-2">
                     <div class="glass-panel p-5">
                         <div class="flex items-center justify-between mb-3">
-                            <h2 class="text-xl font-bold">好友动态</h2>
-                            <div class="flex items-center gap-2"><button id="community-steam-refresh-btn" class="px-3 py-1 text-xs rounded-full bg-white/70 border border-white/60 hover:bg-white">刷新 Steam 动态</button><div id="community-steam-status" class="text-xs text-slate-500">Steam API 未同步</div></div>
+                            <div class="flex items-center gap-2">
+                                <h2 class="text-xl font-bold">好友动态</h2>
+                                <button id="community-steam-refresh-btn" class="p-1 rounded-full hover:bg-black/5 transition-colors" title="刷新 Steam 动态">
+                                    <i data-lucide="refresh-cw" class="w-4 h-4 text-slate-500"></i>
+                                </button>
+                            </div>
+                            <div id="community-steam-status" class="text-xs text-slate-500">Steam API 未同步</div>
                         </div>
                         <textarea id="community-post-input" rows="3" maxlength="300" class="w-full px-4 py-3 rounded-xl border border-white/50 bg-white/70 theme-ring" placeholder="分享你今天的战绩、截图或游戏心情..."></textarea>
                         <div class="flex items-center justify-between mt-3">
@@ -474,18 +515,26 @@
                             <button id="community-post-btn" class="px-4 py-2 text-sm text-white rounded-lg transition-colors theme-bg theme-hover">发布动态</button>
                         </div>
                     </div>
-                    <div id="community-steam-feed" class="space-y-3"></div>
+                    <div id="community-steam-feed" class="space-y-3 hidden"></div>
                     <div id="community-feed" class="space-y-4"></div>
                 </div>
                 <div class="w-80 flex-shrink-0">
                      <div class="p-5 acrylic-sidebar-bg sidebar-right-style h-full shadow-lg space-y-5">
                         <div>
-                            <div class="flex items-center justify-between mb-3"><h2 class="text-lg font-bold text-slate-700">好友列表</h2><span id="community-online-count" class="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">0 在线</span></div>
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-2">
+                                    <h2 class="text-lg font-bold text-slate-700">好友列表</h2>
+                                    <button id="friends-refresh-btn" class="p-1 rounded-full hover:bg-black/5 transition-colors" title="刷新好友列表">
+                                        <i data-lucide="refresh-cw" class="w-4 h-4 text-slate-500"></i>
+                                    </button>
+                                </div>
+                                <span id="community-online-count" class="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">0 在线</span>
+                            </div>
                             <div class="flex gap-2 mb-3 text-xs">
                                 <button class="community-friend-filter px-2 py-1 rounded-full bg-white/70 border border-white/60" data-status="all">全部</button>
                                 <button class="community-friend-filter px-2 py-1 rounded-full bg-white/70 border border-white/60" data-status="online">仅在线</button>
                             </div>
-                            <div id="community-friends" class="space-y-2"></div>
+                            <div id="community-friends" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1"></div>
                         </div>
                         <div class="glass-panel p-4">
                             <h3 class="font-semibold text-slate-700 mb-3">今日社区热词</h3>
@@ -498,22 +547,27 @@
             <!-- VIEW: Home -->
             <div id="view-Home" class="view-section hidden space-y-8 max-w-6xl mx-auto">
                 <div id="home-hero" class="relative w-full h-80 rounded-3xl overflow-hidden shadow-2xl group cursor-pointer">
-                    <div id="home-hero-image" class="absolute inset-0 bg-center bg-cover opacity-35"></div>
-                    <div class="absolute inset-0 bg-gradient-to-r from-slate-900 to-slate-800"></div>
-                    <div class="absolute inset-0 bg-gradient-to-r from-purple-900 via-blue-900 to-slate-900 opacity-80"></div>
-                    <div class="absolute bottom-0 left-0 p-8 text-white max-w-2xl">
-                        <div class="inline-block px-3 py-1 theme-bg rounded-full text-xs font-bold mb-3 uppercase tracking-wider">游戏焦点封面</div>
-                        <h1 id="home-hero-title" class="text-4xl font-bold mb-2">夏季特卖现已开启</h1>
+                    <div class="absolute inset-0 bg-gradient-to-r from-slate-900 to-slate-800 z-0"></div>
+                    <!-- 修改为主题色渐变 -->
+                    <div class="absolute inset-0 opacity-80 z-10" style="background: linear-gradient(to right, var(--primary-color), var(--primary-hover), #1e293b);"></div>
+                    <div id="home-hero-image" class="absolute inset-0 bg-center bg-cover opacity-35 z-20"></div>
+                    <div class="absolute bottom-0 left-0 p-8 text-white max-w-2xl z-30">
+                        <div class="inline-block px-3 py-1 theme-bg rounded-full text-xs font-bold mb-3 uppercase tracking-wider">游戏焦点</div>
+                        <h1 id="home-hero-title" class="text-4xl font-bold mb-2">特卖现已开启</h1>
                         <p id="home-hero-desc" class="text-slate-200 text-lg mb-4">数千款游戏低至一折，更有全新点数商店物品等你来拿。</p>
                         <a id="home-hero-link" href="https://store.steampowered.com/" target="_blank" rel="noreferrer" class="inline-block px-6 py-2 bg-white text-slate-900 rounded-full font-bold hover:bg-blue-50 transition-colors">了解更多</a>
                     </div>
                 </div>
                 <section>
                     <div class="flex items-center justify-between mb-4">
-                        <h3 class="text-2xl font-bold text-slate-800">热门折扣</h3>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-2xl font-bold text-slate-800">热门折扣</h3>
+                            <button id="home-refresh-btn" class="p-1 rounded-full hover:bg-black/5 transition-colors" title="刷新首页">
+                                <i data-lucide="refresh-cw" class="w-4 h-4 text-slate-500"></i>
+                            </button>
+                        </div>
                         <div class="flex items-center gap-3">
                             <span id="home-last-updated" class="text-xs text-slate-500">未更新</span>
-                            <button id="home-refresh-btn" class="px-3 py-1.5 text-xs rounded-full bg-white/70 border border-white/70 hover:bg-white transition-colors">刷新首页</button>
                             <span class="text-xs text-slate-500">数据来源: Steam</span>
                         </div>
                     </div>
@@ -530,15 +584,64 @@
     <!-- AI Modal -->
     <div id="ai-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center">
         <div class="absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity opacity-0" id="modal-backdrop"></div>
-        <div class="relative w-full max-w-lg mx-4 transform scale-95 opacity-0 transition-all duration-300" id="modal-content">
+        <div class="relative w-full max-w-2xl mx-4 transform scale-95 opacity-0 transition-all duration-300" id="modal-content">
             <div class="relative bg-white/80 backdrop-blur-xl border border-white/50 rounded-3xl shadow-2xl overflow-hidden">
                 <div class="h-32 relative overflow-hidden bg-gradient-to-r from-blue-500 to-purple-600" id="modal-header-bg">
                     <button id="close-modal" class="absolute top-4 right-4 p-2 bg-black/20 hover:bg-black/30 rounded-full text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
-                    <div class="absolute bottom-6 left-8 text-white"><h2 id="modal-title" class="text-2xl font-bold">AI Insight</h2></div>
+                    <div class="absolute bottom-6 left-8 text-white"><h2 id="modal-title" class="text-2xl font-bold">AI分析</h2></div>
                 </div>
                 <div class="p-8">
                     <div id="ai-loading" class="flex flex-col items-center justify-center py-8"><div class="w-10 h-10 border-4 border-t-transparent rounded-full animate-spin theme-border"></div><p class="text-slate-500 text-sm mt-4">Thinking...</p></div>
-                    <div id="ai-result" class="hidden"><p id="ai-text" class="text-slate-700 text-lg"></p><button id="close-modal-action" class="mt-6 w-full py-3 text-white rounded-xl font-medium theme-bg theme-hover">Got it</button></div>
+                    <div id="ai-result" class="hidden">
+                        <p id="ai-text" class="text-slate-700 text-lg whitespace-pre-wrap"></p>
+                        <div class="mt-6 flex gap-3">
+                            <button id="ai-back-to-actions" class="flex-1 py-3 bg-white/80 border border-slate-300 rounded-xl text-slate-700 hover:bg-slate-50 transition-all">
+                                <i data-lucide="arrow-left" class="w-4 h-4 inline mr-2"></i>返回
+                            </button>
+                            <button id="close-modal-action" class="flex-1 py-3 text-white rounded-xl font-medium theme-bg theme-hover">Got it</button>
+                        </div>
+                    </div>
+                    <div id="ai-actions" class="space-y-4">
+                        <div id="ai-quick-actions" class="grid grid-cols-2 gap-3">
+                            <button id="ai-btn-tactics" class="p-4 rounded-xl bg-white/80 border border-slate-200 hover:bg-blue-50 hover:border-blue-300 transition-all text-left">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <i data-lucide="sword" class="w-5 h-5 text-blue-600"></i>
+                                    <span class="font-bold text-slate-800">战术分析</span>
+                                </div>
+                                <p class="text-xs text-slate-500">分析当前游戏的核心玩法</p>
+                            </button>
+                            <button id="ai-btn-recommend" class="p-4 rounded-xl bg-white/80 border border-slate-200 hover:bg-purple-50 hover:border-purple-300 transition-all text-left">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <i data-lucide="gamepad-2" class="w-5 h-5 text-purple-600"></i>
+                                    <span class="font-bold text-slate-800">游戏推荐</span>
+                                </div>
+                                <p class="text-xs text-slate-500">从库中挑选合适的游戏</p>
+                            </button>
+                            <button id="ai-btn-review" class="p-4 rounded-xl bg-white/80 border border-slate-200 hover:bg-green-50 hover:border-green-300 transition-all text-left">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <i data-lucide="star" class="w-5 h-5 text-green-600"></i>
+                                    <span class="font-bold text-slate-800">评测生成</span>
+                                </div>
+                                <p class="text-xs text-slate-500">生成简短的游戏评测</p>
+                            </button>
+                            <button id="ai-btn-mood" class="p-4 rounded-xl bg-white/80 border border-slate-200 hover:bg-orange-50 hover:border-orange-300 transition-all text-left">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <i data-lucide="heart" class="w-5 h-5 text-orange-600"></i>
+                                    <span class="font-bold text-slate-800">心情匹配</span>
+                                </div>
+                                <p class="text-xs text-slate-500">根据心情推荐游戏</p>
+                            </button>
+                        </div>
+                        <div class="pt-4 border-t border-slate-200">
+                            <p class="text-sm text-slate-600 mb-3 font-medium">自定义提问</p>
+                            <div class="flex gap-2">
+                                <input id="ai-custom-input" type="text" placeholder="输入你想问的关于游戏的问题..." class="flex-1 px-4 py-3 rounded-xl border border-slate-300 bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <button id="ai-custom-send" class="px-6 py-3 bg-white/80 border border-slate-300 rounded-xl theme-text hover:theme-bg hover:text-white hover:border-transparent transition-all">
+                                    <i data-lucide="send" class="w-5 h-5"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -672,7 +775,7 @@
         });
         document.getElementById('save-ai-config-btn').addEventListener('click', saveAIConfig);
 
-        async function callAI(prompt) {
+        async function callAI(prompt, maxLength = 300) {
             if (!aiConfig.enabled) return "AI 功能已禁用。";
             
             const keyToUse = (aiConfig.apiKey || "").trim();
@@ -687,6 +790,7 @@
             }
 
             try {
+                const promptWithLimit = `${prompt}\n\n请控制回复长度在 ${maxLength} 字以内。`;
                 if (aiConfig.provider === 'gemini') {
                     // ... existing gemini logic ...
                     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${keyToUse}`;
@@ -697,7 +801,7 @@
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
-                            contents: [{ parts: [{ text: prompt }] }]
+                            contents: [{ parts: [{ text: promptWithLimit }] }]
                         })
                     });
 
@@ -707,7 +811,8 @@
                     }
 
                     const data = await response.json();
-                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "未收到 AI 回复";
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "未收到 AI 回复";
+                    return text.length > maxLength + 50 ? text.slice(0, maxLength) + "..." : text;
                 } else {
                     // OpenAI 或 Local 逻辑
                     const apiKeyToUse = aiConfig.apiKey || (aiConfig.provider === 'local' ? 'sk-local' : '');
@@ -716,7 +821,8 @@
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKeyToUse}` },
                         body: JSON.stringify({
                             model: modelToUse,
-                            messages: [{ role: "user", content: prompt }]
+                            messages: [{ role: "user", content: promptWithLimit }],
+                            max_tokens: Math.max(100, Math.floor(maxLength * 1.5))
                         })
                     });
                     
@@ -726,7 +832,8 @@
                         throw new Error(`请求失败: ${errorMsg}`);
                     }
                     const data = await response.json();
-                    return data.choices[0].message.content;
+                    const text = data.choices[0].message.content;
+                    return text.length > maxLength + 50 ? text.slice(0, maxLength) + "..." : text;
                 }
             } catch (error) {
                 console.error(error);
@@ -971,13 +1078,12 @@
                 const hero = document.getElementById('home-hero-image');
                 if (recentGame) {
                     document.getElementById('home-hero-title').innerText = getDisplayTitle(recentGame);
-                    document.getElementById('home-hero-desc').innerText = `当前焦点：${getDisplayTitle(recentGame)} 横屏封面`;
+                    document.getElementById('home-hero-desc').innerText = ``;
                     document.getElementById('home-hero-link').href = recentGame.steamAppId ? `https://store.steampowered.com/app/${recentGame.steamAppId}/` : '#';
                     const cover = recentGame.landscapeCoverUrl || recentGame.coverUrl || DEFAULT_LANDSCAPE_COVER;
                     hero.style.backgroundImage = `url(${cover})`;
                 } else {
                     document.getElementById('home-hero-title').innerText = top.name;
-                    document.getElementById('home-hero-desc').innerText = `当前焦点：${top.name} 横屏封面`;
                     document.getElementById('home-hero-link').href = `https://store.steampowered.com/app/${top.id}/`;
                     const image = top.header_image || top.large_capsule_image || top.small_capsule_image || DEFAULT_LANDSCAPE_COVER;
                     hero.style.backgroundImage = `url(${image})`;
@@ -1051,14 +1157,31 @@
             return String(text || '').length > 12 ? 'title-marquee should-marquee' : 'title-marquee';
         }
 
+        function renderGameTitle(text = '') {
+            const title = String(text || '').trim();
+            if (title.length > 12) {
+                return `<span class="title-marquee-inner"><span>${title}</span><span>${title}</span></span>`;
+            }
+            return `<span class="title-marquee-inner">${title}</span>`;
+        }
+
         function renderSidebarGameList() {
              const listContainer = document.getElementById('sidebar-games');
-             listContainer.innerHTML = allGames.slice(0, 8).map(game => `
+             const recentGames = allGames
+                .filter(g => g.lastPlayed && g.lastPlayed !== '未运行' && g.lastPlayed !== '???')
+                .sort((a, b) => {
+                    const timeA = new Date(a.lastPlayed).getTime() || 0;
+                    const timeB = new Date(b.lastPlayed).getTime() || 0;
+                    return timeB - timeA;
+                })
+                .slice(0, 6);
+             
+             listContainer.innerHTML = recentGames.map(game => `
                 <div class="flex items-center gap-4 px-4 py-3 mx-2 rounded-r-full cursor-pointer transition-all duration-200 group text-slate-600 hover:bg-black/5" onclick="document.dispatchEvent(new CustomEvent('openGameDetail', {detail: ${game.id}}))">
                     <div class="transition-transform duration-200 group-hover:scale-110"><i data-lucide="gamepad-2" class="w-5 h-5"></i></div>
                     <span class="font-medium text-sm truncate">${getDisplayTitle(game)}</span>
                 </div>
-             `).join('');
+             `).join('') || '<div class="px-4 py-2 text-xs text-slate-400">暂无最近游玩记录</div>';
              renderLucideIcons();
         }
 
@@ -1066,9 +1189,24 @@
             const gridContainer = document.getElementById('view-Library');
             if (!gridContainer) return;
 
+            const activeTab = document.querySelector('.tab-btn.active-tab')?.dataset.tab;
+            const isLibraryTab = activeTab === 'Library';
+            const isDetailVisible = !document.getElementById('view-GameDetail')?.classList.contains('hidden');
+            const shouldShowLibrary = isLibraryTab && !isDetailVisible;
+
             let filteredGames = [];
             if (filter === 'all') filteredGames = allGames;
-            else if (filter === 'recent') filteredGames = allGames.filter(g => g.isRecent);
+            else if (filter === 'recent') {
+                filteredGames = allGames.filter(g => g.isRecent).sort((a, b) => {
+                    const getTime = (game) => {
+                        if (game.lastPlayed && game.lastPlayed !== '未运行' && game.lastPlayed !== '???') {
+                            return new Date(game.lastPlayed).getTime();
+                        }
+                        return 0;
+                    };
+                    return getTime(b) - getTime(a);
+                });
+            }
             else if (filter === 'favorites') filteredGames = allGames.filter(g => g.isFav);
 
             if (searchTerm) {
@@ -1098,13 +1236,13 @@
 
             if (isGridView) {
                 gridContainer.style.gridTemplateColumns = 'repeat(auto-fill, minmax(240px, 1fr))';
-                gridContainer.className = "view-section grid gap-8 pb-20";
+                gridContainer.className = shouldShowLibrary ? "view-section grid gap-8 pb-20" : "view-section grid gap-8 pb-20 hidden";
                 gridContainer.innerHTML = filteredGames.map((game) => `
-                <div class="game-card group relative w-full aspect-[3/4] rounded-3xl transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl cursor-pointer" onclick="document.dispatchEvent(new CustomEvent('openGameDetail', {detail: ${game.id}}))">
+                <div class="game-card group relative w-full aspect-[3/4] rounded-3xl transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl cursor-pointer" data-game-id="${game.id}" draggable="true" onclick="document.dispatchEvent(new CustomEvent('openGameDetail', {detail: ${game.id}}))" oncontextmenu="event.preventDefault(); window.showGameContextMenu(event, ${game.id});">
                     <div class="absolute inset-0 rounded-3xl overflow-hidden bg-white/40 backdrop-blur-md shadow-md border border-white/20">
                         <div class="absolute inset-0 bg-gradient-to-br ${game.color || 'from-slate-700 to-slate-900'} opacity-80 transition-transform duration-700 group-hover:scale-110" style="${getGameStyle(game)}"></div>
                         <div class="absolute top-6 left-0 w-full text-center px-4 game-cover-title">
-                            <h3 class="text-white font-bold text-2xl drop-shadow-md ${getMarqueeClass(getDisplayTitle(game))}"><span class="title-marquee-inner">${getDisplayTitle(game)}</span></h3>
+                            <h3 class="text-white font-bold text-2xl drop-shadow-md ${getMarqueeClass(getDisplayTitle(game))}">${renderGameTitle(getDisplayTitle(game))}</h3>
                         </div>
                         <button class="absolute top-3 right-3 z-30 p-2 rounded-full transition-all duration-200 ${game.isFav ? 'text-yellow-400 opacity-100' : 'text-white opacity-0 group-hover:opacity-100 hover:bg-black/20'}" onclick="event.stopPropagation(); window.toggleFavorite(${game.id});"><i data-lucide="star" class="w-5 h-5 ${game.isFav ? 'fill-current' : ''}"></i></button>
                         <div class="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-between p-4 z-20">
@@ -1115,9 +1253,9 @@
                 </div>`).join('');
             } else {
                 gridContainer.style.gridTemplateColumns = '1fr';
-                gridContainer.className = "view-section flex flex-col gap-2 pb-20";
+                gridContainer.className = shouldShowLibrary ? "view-section flex flex-col gap-2 pb-20" : "view-section flex flex-col gap-2 pb-20 hidden";
                 gridContainer.innerHTML = filteredGames.map((game) => `
-                <div class="list-row flex items-center justify-between p-4 bg-white/60 backdrop-blur-md rounded-xl cursor-pointer border border-white/50" onclick="document.dispatchEvent(new CustomEvent('openGameDetail', {detail: ${game.id}}))">
+                <div class="list-row flex items-center justify-between p-4 bg-white/60 backdrop-blur-md rounded-xl cursor-pointer border border-white/50" data-game-id="${game.id}" draggable="true" onclick="document.dispatchEvent(new CustomEvent('openGameDetail', {detail: ${game.id}}))" oncontextmenu="event.preventDefault(); window.showGameContextMenu(event, ${game.id});">
                     <div class="flex items-center gap-4">
                         <div class="w-12 h-12 rounded-lg bg-gradient-to-br ${game.color || 'from-slate-700 to-slate-900'} shadow-sm flex items-center justify-center text-white overflow-hidden" style="${getGameStyle(game)}">${game.coverUrl ? '' : `<i data-lucide="${game.icon || 'gamepad-2'}" class="w-6 h-6"></i>`}</div>
                         <div class="flex items-center gap-2">
@@ -1130,7 +1268,87 @@
                     </div>
                 </div>`).join('');
             }
+            
+            setupDragAndDrop(gridContainer, filter);
             renderLucideIcons();
+        }
+
+        function setupDragAndDrop(container, currentFilter) {
+            if (currentFilter !== 'all') return;
+            
+            let draggedItem = null;
+            let draggedId = null;
+            
+            const items = container.querySelectorAll('[data-game-id]');
+            
+            items.forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedItem = item;
+                    draggedId = item.dataset.gameId;
+                    item.style.opacity = '0.5';
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                
+                item.addEventListener('dragend', () => {
+                    if (draggedItem) {
+                        draggedItem.style.opacity = '1';
+                    }
+                    draggedItem = null;
+                    draggedId = null;
+                    
+                    items.forEach(i => {
+                        i.classList.remove('drag-over-left', 'drag-over-right');
+                    });
+                });
+                
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    
+                    const rect = item.getBoundingClientRect();
+                    const midX = rect.left + rect.width / 2;
+                    
+                    item.classList.remove('drag-over-left', 'drag-over-right');
+                    if (e.clientX < midX) {
+                        item.classList.add('drag-over-left');
+                    } else {
+                        item.classList.add('drag-over-right');
+                    }
+                });
+                
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over-left', 'drag-over-right');
+                });
+                
+                item.addEventListener('drop', async (e) => {
+                    e.preventDefault();
+                    item.classList.remove('drag-over-left', 'drag-over-right');
+                    
+                    if (!draggedId || draggedId === item.dataset.gameId) return;
+                    
+                    const targetId = item.dataset.gameId;
+                    const draggedIndex = allGames.findIndex(g => String(g.id) === draggedId);
+                    const targetIndex = allGames.findIndex(g => String(g.id) === targetId);
+                    
+                    if (draggedIndex === -1 || targetIndex === -1) return;
+                    
+                    const [draggedGame] = allGames.splice(draggedIndex, 1);
+                    
+                    const rect = item.getBoundingClientRect();
+                    const midX = rect.left + rect.width / 2;
+                    const insertIndex = e.clientX < midX ? targetIndex : targetIndex + 1;
+                    
+                    allGames.splice(insertIndex > draggedIndex ? insertIndex - 1 : insertIndex, 0, draggedGame);
+                    
+                    const orderedIds = allGames.map(g => g.id);
+                    
+                    if (electronAPI?.reorderGames) {
+                        await electronAPI.reorderGames(orderedIds);
+                    }
+                    
+                    refreshLibrary();
+                });
+            });
         }
 
         function refreshLibrary() {
@@ -1218,42 +1436,382 @@
             return date.toLocaleString('zh-CN', { hour12: false });
         }
 
-        function ensureSteamApiSettingCard() {
-            const container = document.getElementById('settings-storage');
-            if (!container || document.getElementById('steam-api-key-input')) return;
-            const card = document.createElement('div');
-            card.className = 'p-5 bg-white/40 rounded-2xl border border-white/50 space-y-3';
-            card.innerHTML = `
-                <h4 class="font-bold text-slate-700">Steam API 设置</h4>
-                <p class="text-xs text-slate-500">用于同步 Steam 成就、好友状态、动态与游戏库导入。</p>
-                <input id="steam-api-key-input" type="password" placeholder="请输入 Steam Web API Key" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm theme-ring" />
-                <input id="steam-id-input" type="text" placeholder="请输入你的 SteamID64" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm theme-ring" />
-                <div class="flex gap-2 flex-wrap">
-                    <button id="save-steam-api-key-btn" class="px-4 py-2 text-white text-sm rounded-lg theme-bg theme-hover">保存 Steam 信息</button>
-                    <button id="import-steam-games-btn" class="px-4 py-2 text-sm rounded-lg bg-white border border-white/70 hover:bg-white/90">导入 Steam 游戏</button>
+        function normalizeTitleForCompare(title) {
+            return (title || '').toLowerCase()
+                .replace(/[:\-_\(\)\[\]]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function isGameAlreadyImported(game, allGames) {
+            const gamePath = (game.execPath || '').toLowerCase();
+            const gameTitle = normalizeTitleForCompare(game.title);
+            const gameTitleEn = normalizeTitleForCompare(game.titleEn);
+            
+            for (const existing of allGames) {
+                if (gamePath && (existing.execPath || '').toLowerCase() === gamePath) {
+                    return true;
+                }
+                const existingTitle = normalizeTitleForCompare(existing.title);
+                const existingTitleEn = normalizeTitleForCompare(existing.titleEn);
+                
+                if (gameTitle && (gameTitle === existingTitle || gameTitle === existingTitleEn)) {
+                    return true;
+                }
+                if (gameTitleEn && (gameTitleEn === existingTitle || gameTitleEn === existingTitleEn)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function showScanResultModal(scannedGames) {
+            const existingModal = document.getElementById('scan-result-modal');
+            if (existingModal) existingModal.remove();
+            
+            const modal = document.createElement('div');
+            modal.id = 'scan-result-modal';
+            modal.className = 'fixed inset-0 z-[100] flex items-center justify-center';
+            modal.innerHTML = `
+                <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="this.parentElement.remove()"></div>
+                <div class="relative w-full max-w-3xl max-h-[80vh] bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl flex flex-col m-4">
+                    <div class="flex items-center justify-between p-6 border-b border-slate-200">
+                        <h3 class="text-xl font-bold text-slate-800">选择要添加的程序</h3>
+                        <button onclick="this.closest('#scan-result-modal').remove()" class="p-2 rounded-full hover:bg-black/5"><i data-lucide="x" class="w-5 h-5"></i></button>
+                    </div>
+                    <div class="flex items-center gap-4 px-6 py-3 bg-slate-50 border-b border-slate-200">
+                        <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                            <input type="checkbox" id="scan-select-all" class="rounded theme-text" />
+                            <span>全选</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                            <input type="checkbox" id="scan-select-new" class="rounded theme-text" checked />
+                            <span>仅选择未添加</span>
+                        </label>
+                        <span id="scan-selected-count" class="ml-auto text-sm text-slate-500">已选择 0 款</span>
+                    </div>
+                    <div id="scan-game-list" class="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar"></div>
+                    <div class="flex items-center justify-end gap-3 p-6 border-t border-slate-200">
+                        <button onclick="this.closest('#scan-result-modal').remove()" class="px-4 py-2 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">取消</button>
+                        <button id="scan-add-selected-btn" class="px-4 py-2 text-sm rounded-lg theme-bg theme-hover text-white">添加选中</button>
+                    </div>
                 </div>
-                <div class="text-xs text-slate-500">申请地址：<a class="underline" href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noreferrer">steamcommunity.com/dev/apikey</a></div>
             `;
-            container.appendChild(card);
-            document.getElementById('steam-api-key-input').value = getSteamApiKey();
-            document.getElementById('steam-id-input').value = getSteamId();
-            document.getElementById('save-steam-api-key-btn').addEventListener('click', () => {
-                const v = document.getElementById('steam-api-key-input').value.trim();
-                const steamId = document.getElementById('steam-id-input').value.trim();
-                localStorage.setItem('steam_api_key', v);
-                localStorage.setItem('steam_id64', steamId);
-                alert('Steam 信息已保存');
+            document.body.appendChild(modal);
+            
+            const listContainer = document.getElementById('scan-game-list');
+            const selectedCount = document.getElementById('scan-selected-count');
+            const selectAllCheckbox = document.getElementById('scan-select-all');
+            const selectNewCheckbox = document.getElementById('scan-select-new');
+            
+            scannedGames.forEach((game, index) => {
+                const isExisting = isGameAlreadyImported(game, allGames);
+                
+                const item = document.createElement('div');
+                item.className = `flex items-center gap-4 p-3 rounded-xl ${isExisting ? 'bg-slate-100 opacity-60' : 'bg-white hover:bg-slate-50'} border border-slate-200`;
+                
+                const iconHtml = game.iconPath 
+                    ? `<img src="file:///${game.iconPath}" class="w-8 h-8 object-contain" onerror="this.outerHTML='<i data-lucide=\\'file\\' class=\\'w-5 h-5 text-slate-400\\'></i>'" />`
+                    : `<i data-lucide="file" class="w-5 h-5 text-slate-400"></i>`;
+                
+                item.innerHTML = `
+                    <input type="checkbox" class="scan-game-checkbox rounded theme-text" data-index="${index}" ${isExisting ? '' : 'checked'} />
+                    <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        ${iconHtml}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-medium text-slate-800 truncate">${game.title}</div>
+                        <div class="text-xs text-slate-500 truncate">${game.execPath}</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs px-2 py-1 rounded-full ${isExisting ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}">${isExisting ? '已添加' : game.source}</span>
+                    </div>
+                `;
+                listContainer.appendChild(item);
             });
-            document.getElementById('import-steam-games-btn').addEventListener('click', async () => {
-                if (!electronAPI?.importSteamOwnedGames) return alert('当前环境不支持 Steam 导入');
-                const key = document.getElementById('steam-api-key-input').value.trim();
-                const steamId = document.getElementById('steam-id-input').value.trim();
-                const result = await electronAPI.importSteamOwnedGames(key, steamId);
-                if (!result?.ok) return alert(result?.error || '导入失败');
+            
+            const updateSelectedCount = () => {
+                const checked = listContainer.querySelectorAll('.scan-game-checkbox:checked').length;
+                selectedCount.innerText = `已选择 ${checked} 款`;
+            };
+            
+            listContainer.querySelectorAll('.scan-game-checkbox').forEach(cb => {
+                cb.addEventListener('change', updateSelectedCount);
+            });
+            
+            selectAllCheckbox.addEventListener('change', (e) => {
+                listContainer.querySelectorAll('.scan-game-checkbox').forEach(cb => {
+                    cb.checked = e.target.checked;
+                });
+                updateSelectedCount();
+            });
+            
+            selectNewCheckbox.addEventListener('change', (e) => {
+                scannedGames.forEach((game, i) => {
+                    const isExisting = isGameAlreadyImported(game, allGames);
+                    if (!isExisting) {
+                        const cb = listContainer.querySelector(`.scan-game-checkbox[data-index="${i}"]`);
+                        if (cb) cb.checked = e.target.checked;
+                    }
+                });
+                updateSelectedCount();
+            });
+            
+            updateSelectedCount();
+            renderLucideIcons();
+            
+            document.getElementById('scan-add-selected-btn').addEventListener('click', async () => {
+                const checkedBoxes = listContainer.querySelectorAll('.scan-game-checkbox:checked');
+                if (checkedBoxes.length === 0) {
+                    alert('请选择要添加的程序');
+                    return;
+                }
+                
+                let added = 0;
+                let skipped = 0;
+                
+                for (const cb of checkedBoxes) {
+                    const index = parseInt(cb.dataset.index);
+                    const game = scannedGames[index];
+                    const result = await electronAPI.addGame({
+                        id: Date.now() + Math.random(),
+                        title: game.title,
+                        titleEn: game.titleEn || game.title,
+                        execPath: game.execPath,
+                        coverUrl: game.coverUrl || '',
+                        landscapeCoverUrl: '',
+                        source: game.source,
+                    });
+                    if (result?.ok && !result.duplicate) added++;
+                    else skipped++;
+                }
+                
                 allGames = await electronAPI.getGames();
                 refreshLibrary();
-                refreshSteamCommunityFeed();
-                alert(`导入完成：新增 ${result.added} 款，更新 ${result.updated} 款`);
+                modal.remove();
+                alert(`添加完成：新增 ${added} 款，跳过 ${skipped} 款`);
+            });
+        }
+
+        function showBatchManageModal() {
+            const existingModal = document.getElementById('batch-manage-modal');
+            if (existingModal) existingModal.remove();
+            
+            const modal = document.createElement('div');
+            modal.id = 'batch-manage-modal';
+            modal.className = 'fixed inset-0 z-[100] flex items-center justify-center';
+            modal.innerHTML = `
+                <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="this.parentElement.remove()"></div>
+                <div class="relative w-full max-w-3xl max-h-[80vh] bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl flex flex-col m-4">
+                    <div class="flex items-center justify-between p-6 border-b border-slate-200">
+                        <h3 class="text-xl font-bold text-slate-800">批量管理游戏</h3>
+                        <button onclick="this.closest('#batch-manage-modal').remove()" class="p-2 rounded-full hover:bg-black/5"><i data-lucide="x" class="w-5 h-5"></i></button>
+                    </div>
+                    <div class="flex items-center gap-4 px-6 py-3 bg-slate-50 border-b border-slate-200">
+                        <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                            <input type="checkbox" id="batch-select-all" class="rounded theme-text" />
+                            <span>全选</span>
+                        </label>
+                        <span id="batch-selected-count" class="ml-auto text-sm text-slate-500">已选择 0 款</span>
+                    </div>
+                    <div id="batch-game-list" class="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar"></div>
+                    <div class="flex items-center justify-between p-6 border-t border-slate-200">
+                        <button id="batch-delete-btn" class="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white disabled:opacity-50" disabled>删除选中</button>
+                        <button onclick="this.closest('#batch-manage-modal').remove()" class="px-4 py-2 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">关闭</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+            const listContainer = document.getElementById('batch-game-list');
+            const selectedCount = document.getElementById('batch-selected-count');
+            const selectAllCheckbox = document.getElementById('batch-select-all');
+            const deleteBtn = document.getElementById('batch-delete-btn');
+            
+            allGames.forEach((game) => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center gap-4 p-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-200';
+                item.innerHTML = `
+                    <input type="checkbox" class="batch-game-checkbox rounded theme-text" data-id="${game.id}" />
+                    <div class="w-10 h-10 rounded-lg bg-gradient-to-br ${game.color || 'from-slate-700 to-slate-900'} flex items-center justify-center text-white overflow-hidden flex-shrink-0">
+                        ${game.coverUrl ? `<img src="${game.coverUrl}" class="w-full h-full object-cover" />` : `<i data-lucide="${game.icon || 'gamepad-2'}" class="w-5 h-5"></i>`}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-medium text-slate-800 truncate">${getDisplayTitle(game)}</div>
+                        <div class="text-xs text-slate-500 truncate">${game.execPath || '未设置路径'}</div>
+                    </div>
+                `;
+                listContainer.appendChild(item);
+            });
+            
+            const updateSelectedCount = () => {
+                const checked = listContainer.querySelectorAll('.batch-game-checkbox:checked').length;
+                selectedCount.innerText = `已选择 ${checked} 款`;
+                deleteBtn.disabled = checked === 0;
+            };
+            
+            listContainer.querySelectorAll('.batch-game-checkbox').forEach(cb => {
+                cb.addEventListener('change', updateSelectedCount);
+            });
+            
+            selectAllCheckbox.addEventListener('change', (e) => {
+                listContainer.querySelectorAll('.batch-game-checkbox').forEach(cb => {
+                    cb.checked = e.target.checked;
+                });
+                updateSelectedCount();
+            });
+            
+            renderLucideIcons();
+            
+            deleteBtn.addEventListener('click', async () => {
+                const checkedBoxes = listContainer.querySelectorAll('.batch-game-checkbox:checked');
+                if (checkedBoxes.length === 0) return;
+                
+                if (!confirm(`确定要删除选中的 ${checkedBoxes.length} 款游戏吗？`)) return;
+                
+                for (const cb of checkedBoxes) {
+                    const id = parseFloat(cb.dataset.id);
+                    await electronAPI.removeGame(id);
+                }
+                
+                allGames = await electronAPI.getGames();
+                refreshLibrary();
+                modal.remove();
+                alert(`已删除 ${checkedBoxes.length} 款游戏`);
+            });
+        }
+
+        function ensureSteamApiSettingCard() {
+            const container = document.getElementById('settings-storage');
+            if (!container || document.getElementById('add-games-card')) return;
+            
+            const addGamesCard = document.createElement('div');
+            addGamesCard.id = 'add-games-card';
+            addGamesCard.className = 'p-5 bg-white/40 rounded-2xl border border-white/50 space-y-3';
+            addGamesCard.innerHTML = `
+                <h4 class="font-bold text-slate-700">添加其他已安装的游戏</h4>
+                <p class="text-xs text-slate-500">扫描本地已安装的游戏（Steam、Epic、miHoYo、WeGame）或手动选择目录添加</p>
+                <div class="flex gap-2 flex-wrap">
+                    <button id="scan-installed-games-btn" class="px-4 py-2 text-white text-sm rounded-lg theme-bg theme-hover">扫描已安装游戏</button>
+                    <button id="scan-custom-dir-btn" class="px-4 py-2 text-sm rounded-lg bg-white border border-white/70 hover:bg-white/90">选择目录扫描</button>
+                </div>
+            `;
+            container.appendChild(addGamesCard);
+            
+            const batchCard = document.createElement('div');
+            batchCard.className = 'p-5 bg-white/40 rounded-2xl border border-white/50 space-y-3';
+            batchCard.innerHTML = `
+                <h4 class="font-bold text-slate-700">批量管理</h4>
+                <p class="text-xs text-slate-500">批量删除游戏库中的游戏</p>
+                <div class="flex gap-2 flex-wrap">
+                    <button id="batch-manage-btn" class="px-4 py-2 text-white text-sm rounded-lg theme-bg theme-hover">批量管理</button>
+                </div>
+            `;
+            container.appendChild(batchCard);
+            
+            const steamApiKeyInput = document.getElementById('steam-api-key-input');
+            const steamIdInput = document.getElementById('steam-id-input');
+            if (steamApiKeyInput) steamApiKeyInput.value = getSteamApiKey();
+            if (steamIdInput) steamIdInput.value = getSteamId();
+            
+            const saveSteamBtn = document.getElementById('save-steam-api-key-btn');
+            if (saveSteamBtn) {
+                saveSteamBtn.addEventListener('click', async () => {
+                    const keyInput = document.getElementById('steam-api-key-input');
+                    const idInput = document.getElementById('steam-id-input');
+                    if (keyInput && idInput) {
+                        localStorage.setItem('steam_api_key', keyInput.value.trim());
+                        localStorage.setItem('steam_id64', idInput.value.trim());
+                        await refreshSteamUserInfo();
+                        await refreshSteamFriends();
+                        alert('Steam 信息已保存');
+                    }
+                });
+            }
+            
+            const importSteamBtn = document.getElementById('import-steam-games-btn');
+            if (importSteamBtn) {
+                importSteamBtn.addEventListener('click', async () => {
+                    if (!electronAPI?.importSteamOwnedGames) return alert('当前环境不支持 Steam 导入');
+                    const keyInput = document.getElementById('steam-api-key-input');
+                    const idInput = document.getElementById('steam-id-input');
+                    const key = keyInput?.value.trim() || '';
+                    const steamId = idInput?.value.trim() || '';
+                    const result = await electronAPI.importSteamOwnedGames(key, steamId);
+                    if (!result?.ok) return alert(result?.error || '导入失败');
+                    allGames = await electronAPI.getGames();
+                    refreshLibrary();
+                    refreshSteamCommunityFeed();
+                    alert(`导入完成：新增 ${result.added} 款，更新 ${result.updated} 款`);
+                });
+            }
+            
+            document.getElementById('scan-installed-games-btn').addEventListener('click', async () => {
+                if (!electronAPI?.scanInstalledGames) return alert('当前环境不支持扫描');
+                const btn = document.getElementById('scan-installed-games-btn');
+                btn.disabled = true;
+                btn.innerText = '扫描中...';
+                
+                try {
+                    const result = await electronAPI.scanInstalledGames();
+                    btn.disabled = false;
+                    btn.innerText = '扫描已安装游戏';
+                    
+                    if (!result?.ok) {
+                        alert(result?.error || '扫描失败');
+                        return;
+                    }
+                    
+                    const games = result.games || [];
+                    if (games.length === 0) {
+                        alert('未找到已安装的游戏');
+                        return;
+                    }
+                    
+                    showScanResultModal(games);
+                } catch (e) {
+                    btn.disabled = false;
+                    btn.innerText = '扫描已安装游戏';
+                    alert('扫描失败: ' + (e.message || '未知错误'));
+                }
+            });
+            
+            document.getElementById('batch-manage-btn').addEventListener('click', () => {
+                showBatchManageModal();
+            });
+            
+            document.getElementById('scan-custom-dir-btn').addEventListener('click', async () => {
+                if (!electronAPI?.pickDirectory) return alert('当前环境不支持选择目录');
+                
+                const dir = await electronAPI.pickDirectory();
+                if (!dir) return;
+                
+                const btn = document.getElementById('scan-custom-dir-btn');
+                btn.disabled = true;
+                btn.innerText = '扫描中...';
+                
+                try {
+                    const result = await electronAPI.scanAllPrograms([dir]);
+                    btn.disabled = false;
+                    btn.innerText = '选择目录扫描';
+                    
+                    if (!result?.ok) {
+                        alert(result?.error || '扫描失败');
+                        return;
+                    }
+                    
+                    const programs = result.programs || [];
+                    if (programs.length === 0) {
+                        alert('该目录下未找到可执行程序');
+                        return;
+                    }
+                    
+                    showScanResultModal(programs);
+                } catch (e) {
+                    btn.disabled = false;
+                    btn.innerText = '选择目录扫描';
+                    alert('扫描失败: ' + (e.message || '未知错误'));
+                }
             });
         }
 
@@ -1266,8 +1824,12 @@
             panel.className = 'glass-panel p-6';
             panel.innerHTML = `
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="font-bold text-xl">Steam 情报</h3>
-                    <button id="steam-detail-refresh-btn" class="px-2 py-1 text-xs rounded-full bg-white/70 border border-white/60 hover:bg-white">刷新</button>
+                    <div class="flex items-center gap-2">
+                        <h3 class="font-bold text-xl">Steam 情报</h3>
+                        <button id="steam-detail-refresh-btn" class="p-1 rounded-full hover:bg-black/5 transition-colors" title="刷新 Steam 情报">
+                            <i data-lucide="refresh-cw" class="w-4 h-4 text-slate-500"></i>
+                        </button>
+                    </div>
                 </div>
                 <div id="steam-detail-content" class="text-sm text-slate-600">请先打开一个游戏详情。</div>
             `;
@@ -1298,33 +1860,8 @@
                     return;
                 }
 
-                const myAchievement = info.playerAchievement;
-                const progress = document.getElementById('achievement-progress');
-                const achList = document.getElementById('achievement-recent-list');
-                if (progress) {
-                    progress.textContent = myAchievement ? `已解锁 ${myAchievement.unlocked}/${myAchievement.total}（${myAchievement.rate}%）` : '已显示成就图标（未同步个人解锁进度）';
-                }
-                if (achList) {
-                    const achievements = (info.achievements || []).slice(0, 24);
-                    achList.innerHTML = achievements.length ? achievements.map((item) => {
-                        const unlocked = Boolean(item.achieved);
-                        const icon = unlocked ? (item.icon || item.iconGray || '') : (item.iconGray || item.icon || '');
-                        const unlockText = unlocked && item.unlockTime ? new Date(item.unlockTime * 1000).toLocaleString('zh-CN') : '未解锁';
-                        const description = item.description || (item.hidden ? '隐藏成就，解锁后显示详情。' : '暂无描述');
-                        return `
-                        <div class="achievement-item ${unlocked ? 'unlocked' : 'locked'} relative shrink-0 w-20">
-                            <div class="w-20 h-20 rounded-xl overflow-hidden border ${unlocked ? 'border-emerald-300 shadow-md shadow-emerald-100/70' : 'border-slate-200'} bg-black/10">
-                                ${icon ? `<img src="${icon}" class="w-full h-full object-cover" loading="lazy" />` : '<div class="w-full h-full flex items-center justify-center text-xs text-slate-400">暂无图标</div>'}
-                            </div>
-                            <div class="text-[11px] mt-1 text-center truncate ${unlocked ? 'text-emerald-700' : 'text-slate-500'}">${item.title || item.key}</div>
-                            <div class="achievement-tooltip absolute left-1/2 bottom-[105%] z-20 w-56 rounded-lg bg-slate-900 text-white text-xs p-2 shadow-xl">
-                                <div class="font-semibold">${item.title || item.key}</div>
-                                <div class="text-slate-200 mt-1">${description}</div>
-                                <div class="text-slate-300 mt-1">状态：${unlocked ? `已解锁（${unlockText}）` : '未解锁'}</div>
-                            </div>
-                        </div>`;
-                    }).join('') : '<div class="text-sm text-slate-500">暂无成就数据（请检查 Steam API Key 或该游戏成就配置）。</div>';
-                }
+                updateAchievementUI(info);
+                updateNewsUI(info);
 
                 container.innerHTML = `
                     <div class="space-y-3">
@@ -1334,7 +1871,7 @@
                         <div class="text-slate-700">价格：<span class="font-semibold">${info.price}</span></div>
                         <div class="text-slate-700">当前在线：<span class="font-semibold">${info.currentPlayers ?? '无'}</span></div>
                         <div class="text-slate-700">成就总数：<span class="font-semibold">${info.achievementTotal ?? '无'}</span></div>
-                        <div class="text-slate-700">我的成就：<span class="font-semibold">${myAchievement ? `${myAchievement.unlocked}/${myAchievement.total}` : '未同步'}</span></div>
+                        <div class="text-slate-700">我的成就：<span class="font-semibold">${info.playerAchievement ? `${info.playerAchievement.unlocked}/${info.playerAchievement.total}` : '未同步'}</span></div>
                         <div class="text-slate-700">类型：${(info.genres || []).join(' / ') || '未知'}</div>
                         <div class="text-slate-700">新闻：${info.news?.length ? '' : '无'}</div>
                         <div class="space-y-1">${(info.news || []).slice(0, 2).map((item) => `<a class='block text-xs underline theme-text' href='${item.url}' target='_blank' rel='noreferrer'>${item.title}</a>`).join('')}</div>
@@ -1355,6 +1892,221 @@
                 };
             }
         }
+
+        function updateAchievementUI(info) {
+            const myAchievement = info.playerAchievement;
+            const progress = document.getElementById('achievement-progress');
+            const achList = document.getElementById('achievement-recent-list');
+            if (progress) {
+                progress.textContent = myAchievement ? `已解锁 ${myAchievement.unlocked}/${myAchievement.total}（${myAchievement.rate}%）` : '已显示成就图标（未同步个人解锁进度）';
+            }
+            if (achList) {
+                const achievements = (info.achievements || []).slice(0, 24);
+                achList.innerHTML = achievements.length ? achievements.map((item) => {
+                    const unlocked = Boolean(item.achieved);
+                    const icon = unlocked ? (item.icon || item.iconGray || '') : (item.iconGray || item.icon || '');
+                    const unlockText = unlocked && item.unlockTime ? new Date(item.unlockTime * 1000).toLocaleString('zh-CN') : '未解锁';
+                    const description = item.description || (item.hidden ? '隐藏成就，解锁后显示详情。' : '暂无描述');
+                    return `
+                    <div class="achievement-item ${unlocked ? 'unlocked' : 'locked'} relative shrink-0 w-20">
+                        <div class="w-20 h-20 rounded-xl overflow-hidden border ${unlocked ? 'border-emerald-300 shadow-md shadow-emerald-100/70' : 'border-slate-200'} bg-black/10">
+                            ${icon ? `<img src="${icon}" class="w-full h-full object-cover" loading="lazy" />` : '<div class="w-full h-full flex items-center justify-center text-xs text-slate-400">暂无图标</div>'}
+                        </div>
+                        <div class="text-[11px] mt-1 text-center truncate ${unlocked ? 'text-emerald-700' : 'text-slate-500'}">${item.title || item.key}</div>
+                        <div class="achievement-tooltip absolute left-1/2 bottom-[105%] z-20 w-56 rounded-lg bg-slate-900 text-white text-xs p-2 shadow-xl">
+                            <div class="font-semibold">${item.title || item.key}</div>
+                            <div class="text-slate-200 mt-1">${description}</div>
+                            <div class="text-slate-300 mt-1">状态：${unlocked ? `已解锁（${unlockText}）` : '未解锁'}</div>
+                        </div>
+                    </div>`;
+                }).join('') : '<div class="text-sm text-slate-500">暂无成就数据（请检查 Steam API Key 或该游戏成就配置）。</div>';
+            }
+        }
+
+        function updateNewsUI(info) {
+            const newsList = document.getElementById('game-news-list');
+            if (newsList) {
+                const news = info.news || [];
+                if (news.length > 0) {
+                    newsList.innerHTML = news.slice(0, 5).map((item) => {
+                        const dateStr = item.date ? new Date(item.date * 1000).toLocaleDateString('zh-CN') : '';
+                        return `
+                            <a href="${item.url}" target="_blank" rel="noreferrer" class="group block cursor-pointer hover:bg-black/5 rounded-lg p-2 -mx-2 transition-colors">
+                                <div class="text-xs text-slate-500 mb-1">${dateStr}</div>
+                                <div class="font-medium hover:theme-text transition-colors">${item.title}</div>
+                            </a>
+                        `;
+                    }).join('');
+                } else {
+                    newsList.innerHTML = '<div class="text-sm text-slate-500">暂无 Steam 新闻</div>';
+                }
+            }
+        }
+
+        async function loadSteamAchievementsOnly(game) {
+            const achList = document.getElementById('achievement-recent-list');
+            const progress = document.getElementById('achievement-progress');
+            if (!achList) return;
+            
+            achList.innerHTML = '<div class="text-sm text-slate-500 flex items-center gap-2"><i data-lucide="loader-circle" class="w-4 h-4 animate-spin"></i> 刷新中...</div>';
+            renderLucideIcons();
+            
+            try {
+                if (!electronAPI?.getSteamGameInfo) {
+                    achList.innerHTML = '<div class="text-sm text-slate-500">当前环境不支持 Steam API</div>';
+                    return;
+                }
+                const key = getSteamApiKey();
+                const steamId = getSteamId();
+                const info = await electronAPI.getSteamGameInfo(game, key, steamId);
+                if (info?.found) {
+                    updateAchievementUI(info);
+                } else {
+                    achList.innerHTML = '<div class="text-sm text-slate-500">未找到成就数据</div>';
+                    if (progress) progress.textContent = '未同步 Steam';
+                }
+            } catch (e) {
+                achList.innerHTML = '<div class="text-sm text-slate-500">刷新失败，请重试</div>';
+            }
+        }
+
+        async function loadSteamNewsOnly(game) {
+            const newsList = document.getElementById('game-news-list');
+            if (!newsList) return;
+            
+            newsList.innerHTML = '<div class="text-sm text-slate-500 flex items-center gap-2"><i data-lucide="loader-circle" class="w-4 h-4 animate-spin"></i> 刷新中...</div>';
+            renderLucideIcons();
+            
+            try {
+                if (!electronAPI?.getSteamGameInfo) {
+                    newsList.innerHTML = '<div class="text-sm text-slate-500">当前环境不支持 Steam API</div>';
+                    return;
+                }
+                const key = getSteamApiKey();
+                const steamId = getSteamId();
+                const info = await electronAPI.getSteamGameInfo(game, key, steamId);
+                if (info?.found) {
+                    updateNewsUI(info);
+                } else {
+                    newsList.innerHTML = '<div class="text-sm text-slate-500">未找到新闻数据</div>';
+                }
+            } catch (e) {
+                newsList.innerHTML = '<div class="text-sm text-slate-500">刷新失败，请重试</div>';
+            }
+        }
+
+        function setupRefreshButton(btnId, refreshFn) {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            btn.onclick = async () => {
+                const icon = btn.querySelector('i');
+                if (icon) {
+                    icon.classList.add('animate-spin');
+                }
+                btn.disabled = true;
+                await refreshFn();
+                setTimeout(() => {
+                    if (icon) {
+                        icon.classList.remove('animate-spin');
+                    }
+                    btn.disabled = false;
+                }, 300);
+            };
+        }
+
+        function initDetailRefreshButtons() {
+            setupRefreshButton('achievement-refresh-btn', () => {
+                if (currentGameForAI) return loadSteamAchievementsOnly(currentGameForAI);
+            });
+            setupRefreshButton('news-refresh-btn', () => {
+                if (currentGameForAI) return loadSteamNewsOnly(currentGameForAI);
+            });
+            setupRefreshButton('steam-detail-refresh-btn', () => {
+                if (currentGameForAI) return loadSteamDetailInfo(currentGameForAI);
+            });
+        }
+
+        window.showGameContextMenu = (event, gameId) => {
+            const game = allGames.find(g => g.id === gameId);
+            if (!game) return;
+            
+            const existingMenu = document.getElementById('game-context-menu');
+            if (existingMenu) existingMenu.remove();
+            
+            const menu = document.createElement('div');
+            menu.id = 'game-context-menu';
+            menu.className = 'fixed z-[200] min-w-[160px] bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-white/50 py-2 overflow-hidden';
+            menu.style.left = `${Math.min(event.clientX, window.innerWidth - 180)}px`;
+            menu.style.top = `${Math.min(event.clientY, window.innerHeight - 200)}px`;
+            
+            menu.innerHTML = `
+                <div class="context-menu-item flex items-center gap-3 px-4 py-2.5 hover:bg-slate-100 cursor-pointer transition-colors" data-action="launch">
+                    <i data-lucide="play" class="w-4 h-4 text-slate-600"></i>
+                    <span class="text-sm text-slate-700">启动游戏</span>
+                </div>
+                <div class="context-menu-item flex items-center gap-3 px-4 py-2.5 hover:bg-slate-100 cursor-pointer transition-colors" data-action="detail">
+                    <i data-lucide="info" class="w-4 h-4 text-slate-600"></i>
+                    <span class="text-sm text-slate-700">查看详情</span>
+                </div>
+                <div class="context-menu-item flex items-center gap-3 px-4 py-2.5 hover:bg-slate-100 cursor-pointer transition-colors" data-action="edit">
+                    <i data-lucide="pencil" class="w-4 h-4 text-slate-600"></i>
+                    <span class="text-sm text-slate-700">编辑信息</span>
+                </div>
+                <div class="context-menu-item flex items-center gap-3 px-4 py-2.5 hover:bg-slate-100 cursor-pointer transition-colors" data-action="favorite">
+                    <i data-lucide="star" class="w-4 h-4 text-slate-600 ${game.isFav ? 'fill-yellow-400 text-yellow-400' : ''}"></i>
+                    <span class="text-sm text-slate-700">${game.isFav ? '取消收藏' : '添加收藏'}</span>
+                </div>
+                <div class="h-px bg-slate-200 my-1"></div>
+                <div class="context-menu-item flex items-center gap-3 px-4 py-2.5 hover:bg-red-50 cursor-pointer transition-colors" data-action="delete">
+                    <i data-lucide="trash-2" class="w-4 h-4 text-red-500"></i>
+                    <span class="text-sm text-red-500">删除游戏</span>
+                </div>
+            `;
+            
+            document.body.appendChild(menu);
+            renderLucideIcons();
+            
+            const closeMenu = () => {
+                menu.remove();
+                document.removeEventListener('click', closeMenu);
+                document.removeEventListener('contextmenu', closeMenu);
+            };
+            
+            setTimeout(() => {
+                document.addEventListener('click', closeMenu);
+                document.addEventListener('contextmenu', closeMenu);
+            }, 10);
+            
+            menu.querySelectorAll('.context-menu-item').forEach(item => {
+                item.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const action = item.dataset.action;
+                    closeMenu();
+                    
+                    switch (action) {
+                        case 'launch':
+                            window.launchGame(gameId);
+                            break;
+                        case 'detail':
+                            document.dispatchEvent(new CustomEvent('openGameDetail', { detail: gameId }));
+                            break;
+                        case 'edit':
+                            await openGameForm('edit', game);
+                            break;
+                        case 'favorite':
+                            window.toggleFavorite(gameId);
+                            break;
+                        case 'delete':
+                            if (confirm(`确定删除「${getDisplayTitle(game)}」吗？`)) {
+                                await electronAPI.removeGame(gameId);
+                                allGames = allGames.filter(g => g.id !== gameId);
+                                refreshLibrary();
+                            }
+                            break;
+                    }
+                });
+            });
+        };
 
         window.toggleFavorite = async (id) => {
             const game = allGames.find(g => g.id === id);
@@ -1684,27 +2436,19 @@
 
             ensureSteamApiSettingCard();
             ensureSteamDetailPanel();
-            document.getElementById('steam-detail-refresh-btn')?.addEventListener('click', () => {
-                if (currentGameForAI) loadSteamDetailInfo(currentGameForAI);
-            });
+            initDetailRefreshButtons();
             renderLucideIcons();
         }
 
-        const defaultCommunityPosts = [
-            { id: 1, author: 'Alex_Shooter', status: '2小时前 • 玩《Apex 英雄》', content: '这把绝了！最后那个圈简直是混乱，但我还是拿到了冠军！🏆', likes: 14, liked: false, createdAt: Date.now() - 7200000 },
-            { id: 2, author: 'MomoCraft', status: '5小时前 • 创意工坊', content: '新做了一个轻量化 MOD，帧数提升明显，晚上发链接。', likes: 8, liked: false, createdAt: Date.now() - 18000000 },
-        ];
-        const defaultFriends = [
-            { name: 'KillerQueen', status: 'online', game: '在线 · CS2', color: 'bg-indigo-500' },
-            { name: 'NeoRacer', status: 'online', game: '在线 · 地平线5', color: 'bg-orange-500' },
-            { name: 'Nora', status: 'offline', game: '离线 · 1小时前在线', color: 'bg-slate-500' },
-            { name: 'PixelFox', status: 'offline', game: '离线 · 3小时前在线', color: 'bg-pink-500' },
-        ];
+        const defaultCommunityPosts = [];
+        const defaultFriends = [];
         let communityPosts = [];
         let communityFriends = [];
         let communityFriendFilter = 'all';
         let steamCommunityFeed = [];
         let steamFriends = [];
+        let steamUserInfo = null;
+        let steamFriendsActivities = [];
 
         function loadCommunityState() {
             communityPosts = JSON.parse(localStorage.getItem('steam_community_posts') || 'null') || [...defaultCommunityPosts];
@@ -1719,24 +2463,50 @@
             return String(input || '').replace(/<[^>]*>/g, '').trim();
         }
 
+        async function refreshSteamFriendsActivities() {
+            if (!electronAPI?.getSteamFriendsActivities) return;
+            try {
+                const key = getSteamApiKey();
+                const steamId = getSteamId();
+                steamFriendsActivities = await electronAPI.getSteamFriendsActivities(key, steamId);
+            } catch {
+                steamFriendsActivities = [];
+            }
+            renderCommunityFeed();
+        }
+
         function renderSteamCommunityFeed() {
             const container = document.getElementById('community-steam-feed');
             const status = document.getElementById('community-steam-status');
             if (!container) return;
             if (!steamCommunityFeed.length) {
-                container.innerHTML = '<div class="glass-panel p-4 text-sm text-slate-500">暂未获取到 Steam 社区动态，点击“刷新 Steam 动态”重试。</div>';
+                container.innerHTML = '<div class="glass-panel p-4 text-sm text-slate-500">暂未获取到 Steam 社区动态，请刷新重试。</div>';
                 if (status && status.textContent.includes('同步中')) status.textContent = 'Steam API 暂无数据';
                 return;
             }
 
-            container.innerHTML = steamCommunityFeed.map((entry) => {
+            const sortedFeed = [...steamCommunityFeed].sort((a, b) => {
+                const getTime = (entry) => {
+                    if (entry.news && entry.news.length > 0) {
+                        return entry.news[0].date || 0;
+                    }
+                    return 0;
+                };
+                return getTime(b) - getTime(a);
+            });
+
+            container.innerHTML = sortedFeed.map((entry) => {
                 const news = entry.news?.[0];
                 const excerpt = stripHtml(news?.excerpt).slice(0, 120);
+                const timeStr = news?.date ? new Date(news.date * 1000).toLocaleString('zh-CN', { hour12: false }) : '';
                 return `
                     <article class="glass-panel p-4 border border-blue-100/60">
                         <div class="flex items-center justify-between mb-2">
                             <div class="font-semibold text-slate-800">${entry.title} <span class="text-xs text-slate-500">(AppID: ${entry.appId})</span></div>
-                            <div class="text-xs text-blue-600">${entry.currentPlayers != null ? `在线 ${entry.currentPlayers}` : '在线人数需 Steam Key'}</div>
+                            <div class="flex items-center gap-2">
+                                ${timeStr ? `<span class="text-xs text-slate-400">${timeStr}</span>` : ''}
+                                <div class="text-xs text-blue-600">${entry.currentPlayers != null ? `在线 ${entry.currentPlayers}` : '在线人数需 Steam Key'}</div>
+                            </div>
                         </div>
                         ${news ? `<a href="${news.url}" target="_blank" rel="noreferrer" class="font-medium theme-text hover:underline">${news.title}</a>
                         <p class="text-xs text-slate-600 mt-1">${excerpt || '暂无摘要'}</p>` : '<div class="text-xs text-slate-500">暂无社区新闻</div>'}
@@ -1780,31 +2550,188 @@
             renderCommunityFriends();
         }
 
+        async function refreshSteamUserInfo() {
+            if (!electronAPI?.getSteamUserInfo) return;
+            try {
+                const key = getSteamApiKey();
+                const steamId = getSteamId();
+                steamUserInfo = await electronAPI.getSteamUserInfo(key, steamId);
+            } catch {
+                steamUserInfo = null;
+            }
+            renderSteamUserInfo();
+        }
+
+        function renderSteamUserInfo() {
+            const avatarEl = document.getElementById('steam-avatar');
+            const nameEl = document.getElementById('steam-display-name');
+            const statusDot = document.getElementById('steam-status-dot');
+            const statusText = document.getElementById('steam-status-text');
+
+            if (!steamUserInfo) {
+                if (avatarEl) {
+                    avatarEl.innerHTML = '?';
+                    avatarEl.className = 'w-20 h-20 rounded-full text-white flex items-center justify-center text-3xl font-bold shadow-lg ring-4 ring-white/50 theme-bg';
+                    avatarEl.style.backgroundImage = '';
+                }
+                if (nameEl) nameEl.textContent = '未登录';
+                if (statusDot) statusDot.className = 'w-2 h-2 rounded-full bg-slate-400';
+                if (statusText) statusText.textContent = '请配置 Steam API';
+                return;
+            }
+
+            if (avatarEl && steamUserInfo.avatar) {
+                avatarEl.style.backgroundImage = `url(${steamUserInfo.avatar})`;
+                avatarEl.style.backgroundSize = 'cover';
+                avatarEl.style.backgroundPosition = 'center';
+                avatarEl.innerHTML = '';
+            }
+            if (nameEl) nameEl.textContent = steamUserInfo.name;
+            if (statusDot) {
+                statusDot.className = `w-2 h-2 rounded-full ${steamUserInfo.status === 'online' ? 'bg-green-500' : 'bg-slate-400'}`;
+            }
+            if (statusText) {
+                statusText.textContent = steamUserInfo.game ? `正在玩 ${steamUserInfo.game}` : (steamUserInfo.status === 'online' ? '在线' : '离线');
+            }
+        }
+
         function renderCommunityFeed() {
             const feed = document.getElementById('community-feed');
             if (!feed) return;
-            if (!communityPosts.length) {
-                feed.innerHTML = '<div class="glass-panel p-6 text-sm text-slate-500">还没有动态，发一条试试吧。</div>';
+
+            const allActivities = [];
+
+            steamFriendsActivities.forEach(activity => {
+                allActivities.push({
+                    type: activity.type,
+                    id: `activity-${activity.friendId}-${activity.gameAppId}-${activity.timestamp}`,
+                    friendId: activity.friendId,
+                    author: activity.friendName,
+                    realName: activity.friendRealName,
+                    game: activity.game,
+                    gameAppId: activity.gameAppId,
+                    achievement: activity.achievement || '',
+                    avatar: activity.friendAvatar,
+                    createdAt: activity.timestamp
+                });
+            });
+
+            steamCommunityFeed.forEach(entry => {
+                const news = entry.news?.[0];
+                if (news) {
+                    allActivities.push({
+                        type: 'game_news',
+                        id: `game-${entry.appId}-${news.gid}`,
+                        author: entry.title,
+                        content: news.title,
+                        url: news.url,
+                        excerpt: stripHtml(news.excerpt).slice(0, 120),
+                        createdAt: news.date * 1000,
+                        currentPlayers: entry.currentPlayers
+                    });
+                }
+            });
+
+            communityPosts.forEach(post => {
+                allActivities.push({
+                    type: 'user',
+                    id: post.id,
+                    author: post.author,
+                    status: post.status,
+                    content: post.content,
+                    likes: post.likes,
+                    liked: post.liked,
+                    createdAt: post.createdAt,
+                    isMine: post.author === '你'
+                });
+            });
+
+            allActivities.sort((a, b) => b.createdAt - a.createdAt);
+
+            if (allActivities.length === 0) {
+                feed.innerHTML = '<div class="glass-panel p-6 text-sm text-slate-500">暂无动态，请配置 Steam API 后刷新。</div>';
                 return;
             }
-            feed.innerHTML = communityPosts.sort((a, b) => b.createdAt - a.createdAt).map((post) => {
-                const mine = post.author === '你';
-                return `
-                <article class="glass-panel p-5" data-post-id="${post.id}">
-                    <div class="flex items-center justify-between mb-3">
-                        <div>
-                            <div class="font-semibold text-slate-800">${post.author}</div>
-                            <div class="text-xs text-slate-500">${post.status}</div>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <div class="text-xs text-slate-400">${new Date(post.createdAt).toLocaleString('zh-CN', { hour12: false })}</div>
-                            ${mine ? `<button class="community-edit-btn px-2 py-1 text-xs rounded-full border border-white/60 bg-white/70 hover:bg-white" data-id="${post.id}">编辑</button>
-                            <button class="community-delete-btn px-2 py-1 text-xs rounded-full border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100" data-id="${post.id}">删除</button>` : ''}
+
+            const formatTime = (timestamp) => {
+                const now = Date.now();
+                const diff = now - timestamp;
+                if (diff < 60000) return '刚刚';
+                if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
+                if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
+                if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`;
+                return new Date(timestamp).toLocaleDateString('zh-CN');
+            };
+
+            feed.innerHTML = allActivities.map(activity => {
+                if (activity.type === 'playing') {
+                    return `
+                <article class="glass-panel p-4 border border-green-100/60">
+                    <div class="flex items-center gap-3">
+                        ${activity.avatar ? `<img src="${activity.avatar}" class="w-10 h-10 rounded-full" />` : `<div class="w-10 h-10 rounded-full bg-green-500"></div>`}
+                        <div class="flex-1">
+                            <div class="font-semibold text-slate-800">${activity.author}${activity.realName ? ` <span class="text-slate-500 font-normal">(${activity.realName})</span>` : ''}</div>
+                            <div class="text-xs text-green-600">🎮 正在玩 ${activity.game}</div>
                         </div>
                     </div>
-                    <p class="text-slate-700 whitespace-pre-wrap">${post.content}</p>
-                    <button class="community-like-btn mt-4 px-3 py-1.5 text-xs rounded-full border ${post.liked ? 'bg-rose-100 text-rose-600 border-rose-200' : 'bg-white/70 border-white/50 text-slate-600'}" data-id="${post.id}">👍 ${post.likes}</button>
                 </article>`;
+                } else if (activity.type === 'first_play') {
+                    return `
+                <article class="glass-panel p-4 border border-purple-100/60">
+                    <div class="flex items-center gap-3">
+                        ${activity.avatar ? `<img src="${activity.avatar}" class="w-10 h-10 rounded-full" />` : `<div class="w-10 h-10 rounded-full bg-purple-500"></div>`}
+                        <div class="flex-1">
+                            <div class="font-semibold text-slate-800">${activity.author}${activity.realName ? ` <span class="text-slate-500 font-normal">(${activity.realName})</span>` : ''}</div>
+                            <div class="text-xs text-purple-600">🆕 首次启动了 ${activity.game}</div>
+                        </div>
+                        <div class="text-xs text-slate-400">${formatTime(activity.createdAt)}</div>
+                    </div>
+                </article>`;
+                } else if (activity.type === 'achievement') {
+                    return `
+                <article class="glass-panel p-4 border border-yellow-100/60">
+                    <div class="flex items-center gap-3">
+                        ${activity.avatar ? `<img src="${activity.avatar}" class="w-10 h-10 rounded-full" />` : `<div class="w-10 h-10 rounded-full bg-yellow-500"></div>`}
+                        <div class="flex-1">
+                            <div class="font-semibold text-slate-800">${activity.author}${activity.realName ? ` <span class="text-slate-500 font-normal">(${activity.realName})</span>` : ''}</div>
+                            <div class="text-xs text-yellow-700">🏆 在 ${activity.game} 中获得了成就</div>
+                            <div class="text-xs text-yellow-600 mt-0.5">${activity.achievement}</div>
+                        </div>
+                        <div class="text-xs text-slate-400">${formatTime(activity.createdAt)}</div>
+                    </div>
+                </article>`;
+                } else if (activity.type === 'game_news') {
+                    return `
+                <article class="glass-panel p-4 border border-blue-100/60">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="font-semibold text-slate-800">${activity.author}</div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-slate-400">${new Date(activity.createdAt).toLocaleString('zh-CN', { hour12: false })}</span>
+                            ${activity.currentPlayers != null ? `<span class="text-xs text-blue-600">在线 ${activity.currentPlayers}</span>` : ''}
+                        </div>
+                    </div>
+                    <a href="${activity.url}" target="_blank" rel="noreferrer" class="font-medium theme-text hover:underline">${activity.content}</a>
+                    ${activity.excerpt ? `<p class="text-xs text-slate-600 mt-1">${activity.excerpt}</p>` : ''}
+                </article>`;
+                } else if (activity.type === 'user') {
+                    return `
+                <article class="glass-panel p-5" data-post-id="${activity.id}">
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <div class="font-semibold text-slate-800">${activity.author}</div>
+                            <div class="text-xs text-slate-500">${activity.status}</div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="text-xs text-slate-400">${new Date(activity.createdAt).toLocaleString('zh-CN', { hour12: false })}</div>
+                            ${activity.isMine ? `<button class="community-edit-btn px-2 py-1 text-xs rounded-full border border-white/60 bg-white/70 hover:bg-white" data-id="${activity.id}">编辑</button>
+                            <button class="community-delete-btn px-2 py-1 text-xs rounded-full border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100" data-id="${activity.id}">删除</button>` : ''}
+                        </div>
+                    </div>
+                    <p class="text-slate-700 whitespace-pre-wrap">${activity.content}</p>
+                    <button class="community-like-btn mt-4 px-3 py-1.5 text-xs rounded-full border ${activity.liked ? 'bg-rose-100 text-rose-600 border-rose-200' : 'bg-white/70 border-white/50 text-slate-600'}" data-id="${activity.id}">👍 ${activity.likes}</button>
+                </article>`;
+                }
+                return '';
             }).join('');
 
             feed.querySelectorAll('.community-like-btn').forEach((btn) => {
@@ -1855,24 +2782,41 @@
             const onlineCount = document.getElementById('community-online-count');
             if (!container || !onlineCount) return;
 
-            const taggedSteamFriends = steamFriends.map((friend) => ({ ...friend, source: 'steam' }));
-            const taggedLocalFriends = communityFriends.map((friend) => ({ ...friend, source: friend.source || 'local' }));
-            const mixedFriends = [...taggedSteamFriends, ...taggedLocalFriends]
-                .filter((friend, index, arr) => arr.findIndex((x) => (x.id && x.id === friend.id) || x.name === friend.name) === index);
+            const sortedFriends = [...steamFriends].sort((a, b) => {
+                if (a.isPlaying && !b.isPlaying) return -1;
+                if (!a.isPlaying && b.isPlaying) return 1;
+                if (a.status === 'online' && b.status !== 'online') return -1;
+                if (a.status !== 'online' && b.status === 'online') return 1;
+                return 0;
+            });
 
-            const online = mixedFriends.filter(f => f.status === 'online').length;
-            onlineCount.textContent = `${online} 在线`;
+            const online = sortedFriends.filter(f => f.status === 'online').length;
+            const playing = sortedFriends.filter(f => f.isPlaying).length;
+            onlineCount.textContent = `${online} 在线 · ${playing} 在玩`;
 
-            const list = mixedFriends.filter(friend => communityFriendFilter === 'all' || friend.status === 'online');
+            const list = communityFriendFilter === 'online' 
+                ? sortedFriends.filter(f => f.status === 'online') 
+                : sortedFriends;
+            
+            if (list.length === 0) {
+                container.innerHTML = '<div class="text-xs text-slate-500">暂无好友数据，请配置 Steam API 后刷新。</div>';
+                return;
+            }
+            
             container.innerHTML = list.map(friend => `
                 <div class="flex items-center gap-3 p-2 rounded-xl hover:bg-black/5 cursor-pointer">
-                    ${friend.avatar ? `<img src="${friend.avatar}" class="w-8 h-8 rounded-full" />` : `<div class="w-8 h-8 rounded-full ${friend.color || 'bg-slate-500'}"></div>`}
-                    <div>
-                        <div class="text-sm font-bold flex items-center gap-2">${friend.name}${friend.source === 'steam' ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">Steam好友</span>' : ''}</div>
-                        <div class="text-xs ${friend.status === 'online' ? 'text-green-600' : 'text-slate-500'}">${friend.game}</div>
+                    ${friend.avatar ? `<img src="${friend.avatar}" class="w-8 h-8 rounded-full" />` : `<div class="w-8 h-8 rounded-full bg-slate-500"></div>`}
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-bold flex items-center gap-2 truncate">
+                            ${friend.name}
+                            ${friend.realName ? `<span class="text-[10px] text-slate-500 font-normal">(${friend.realName})</span>` : ''}
+                        </div>
+                        <div class="text-xs ${friend.isPlaying ? 'text-green-600 font-medium' : friend.status === 'online' ? 'text-blue-600' : 'text-slate-500'}">
+                            ${friend.isPlaying ? `🎮 正在玩 ${friend.game}` : friend.status === 'online' ? '🟢 在线' : '⚫ 离线'}
+                        </div>
                     </div>
                 </div>
-            `).join('') || '<div class="text-xs text-slate-500">当前没有在线好友。</div>';
+            `).join('');
         }
 
         function renderCommunityTrending() {
@@ -1897,7 +2841,13 @@
                     postStatus.textContent = `${postInput.value.length}/300`;
                 });
             }
-            document.getElementById('community-steam-refresh-btn')?.addEventListener('click', refreshSteamCommunityFeed);
+
+            setupRefreshButton('community-steam-refresh-btn', async () => {
+                await Promise.all([refreshSteamCommunityFeed(), refreshSteamFriendsActivities()]);
+            });
+            setupRefreshButton('friends-refresh-btn', async () => {
+                await Promise.all([refreshSteamFriends(), refreshSteamFriendsActivities()]);
+            });
 
             postBtn?.addEventListener('click', () => {
                 const content = postInput?.value.trim();
@@ -2014,9 +2964,63 @@
                 btn.classList.add('theme-bg-light', 'theme-text', 'font-semibold');
                 
                 settingPanels.forEach(p => p.classList.add('hidden'));
-                document.getElementById(btn.dataset.target).classList.remove('hidden');
+                const targetPanel = document.getElementById(btn.dataset.target);
+                targetPanel.classList.remove('hidden');
+                
+                if (btn.dataset.target === 'settings-storage') {
+                    refreshDiskSpace();
+                }
+                if (btn.dataset.target === 'settings-account') {
+                    refreshSteamUserInfo();
+                }
             });
         });
+
+        async function refreshDiskSpace() {
+            const container = document.getElementById('disk-space-container');
+            if (!container) return;
+            
+            if (!electronAPI?.getDiskSpace) {
+                container.innerHTML = '<div class="text-sm text-slate-500">无法获取磁盘信息</div>';
+                return;
+            }
+            
+            try {
+                const drives = await electronAPI.getDiskSpace();
+                if (!drives || drives.length === 0) {
+                    container.innerHTML = '<div class="text-sm text-slate-500">无法获取磁盘信息</div>';
+                    return;
+                }
+                
+                const formatSize = (bytes) => {
+                    if (bytes >= 1024 ** 3) return (bytes / (1024 ** 3)).toFixed(1) + ' GB';
+                    if (bytes >= 1024 ** 2) return (bytes / (1024 ** 2)).toFixed(1) + ' MB';
+                    return (bytes / 1024).toFixed(1) + ' KB';
+                };
+                
+                container.innerHTML = drives.map(drive => {
+                    const usedPercent = drive.total > 0 ? (drive.used / drive.total * 100).toFixed(1) : 0;
+                    return `
+                        <div class="p-4 bg-white/40 rounded-xl border border-white/50">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="font-bold text-slate-700">${drive.drive}</span>
+                                <span class="text-xs text-slate-500">${usedPercent}% 已使用</span>
+                            </div>
+                            <div class="h-3 bg-slate-200 rounded-full overflow-hidden mb-2">
+                                <div class="h-full theme-bg transition-all" style="width: ${usedPercent}%"></div>
+                            </div>
+                            <div class="flex justify-between text-xs text-slate-500">
+                                <span>已用: ${formatSize(drive.used)}</span>
+                                <span>剩余: ${formatSize(drive.free)}</span>
+                                <span>总计: ${formatSize(drive.total)}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                container.innerHTML = '<div class="text-sm text-slate-500">获取磁盘信息失败</div>';
+            }
+        }
 
         // Detail View Logic
         document.addEventListener('openGameDetail', (e) => {
@@ -2060,43 +3064,172 @@
             currentGameForAI = null;
         });
 
+        document.getElementById('detail-sync-steam-btn').addEventListener('click', async () => {
+            if (!currentGameForAI) return;
+            const btn = document.getElementById('detail-sync-steam-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-circle" class="w-5 h-5 animate-spin"></i> 同步中...';
+            renderLucideIcons();
+            
+            try {
+                const key = getSteamApiKey();
+                const steamId = getSteamId();
+                if (!key || !steamId) {
+                    alert('请先在设置中配置 Steam API Key 和 SteamID64');
+                    return;
+                }
+                
+                const info = await electronAPI.getSteamGameInfo(currentGameForAI, key, steamId);
+                
+                if (info?.found && info.playtime_forever !== undefined) {
+                    const hours = Math.round(info.playtime_forever / 60 * 10) / 10;
+                    const patch = { hours };
+                    if (info.lastPlayed) {
+                        patch.lastPlayed = info.lastPlayed;
+                    }
+                    await electronAPI.updateGame(currentGameForAI.id, patch);
+                    currentGameForAI = await electronAPI.getGames().then(games => games.find(g => g.id === currentGameForAI.id));
+                    allGames = await electronAPI.getGames();
+                    
+                    document.getElementById('detail-hours').innerText = `${hours} 小时`;
+                    if (info.lastPlayed) {
+                        document.getElementById('detail-last-played').innerText = `上次: ${formatLastPlayedText(info.lastPlayed)}`;
+                    }
+                    refreshLibrary();
+                    alert(`同步成功：游玩时间 ${hours} 小时`);
+                } else {
+                    alert(info?.message || '未找到该游戏的Steam数据，请确保游戏名称与Steam库中的名称一致');
+                }
+            } catch (e) {
+                alert('同步失败: ' + (e.message || '未知错误'));
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="refresh-cw" class="w-5 h-5"></i> 同步Steam';
+                renderLucideIcons();
+            }
+        });
+
         // AI Logic & Modal
         const modal = document.getElementById('ai-modal');
         const modalBackdrop = document.getElementById('modal-backdrop');
         const modalContent = document.getElementById('modal-content');
+        const aiLoading = document.getElementById('ai-loading');
+        const aiResult = document.getElementById('ai-result');
+        const aiActions = document.getElementById('ai-actions');
+        const aiText = document.getElementById('ai-text');
+        const modalTitle = document.getElementById('modal-title');
         
-        function openModal() {
+        function openModal(showActions = true) {
             modal.classList.remove('hidden');
             setTimeout(() => {
                 modalBackdrop.classList.remove('opacity-0');
                 modalContent.classList.remove('opacity-0', 'scale-95');
                 modalContent.classList.add('opacity-100', 'scale-100');
             }, 10);
+            
+            if (showActions) {
+                aiLoading.classList.add('hidden');
+                aiResult.classList.add('hidden');
+                aiActions.classList.remove('hidden');
+            }
         }
+        
         function closeModal() {
             modalBackdrop.classList.add('opacity-0');
             modalContent.classList.remove('opacity-100', 'scale-100');
             modalContent.classList.add('opacity-0', 'scale-95');
             setTimeout(() => modal.classList.add('hidden'), 300);
         }
+        
+        function showLoading(title = 'AI分析') {
+            modalTitle.textContent = title;
+            aiLoading.classList.remove('hidden');
+            aiResult.classList.add('hidden');
+            aiActions.classList.add('hidden');
+        }
+        
+        function showResult(text, title = 'AI分析') {
+            modalTitle.textContent = title;
+            aiText.textContent = text;
+            aiLoading.classList.add('hidden');
+            aiResult.classList.remove('hidden');
+            aiActions.classList.add('hidden');
+        }
+        
         document.getElementById('close-modal').addEventListener('click', closeModal);
         document.getElementById('close-modal-action').addEventListener('click', closeModal);
+        document.getElementById('ai-back-to-actions').addEventListener('click', () => {
+            modalTitle.textContent = 'AI分析';
+            aiLoading.classList.add('hidden');
+            aiResult.classList.add('hidden');
+            aiActions.classList.remove('hidden');
+        });
         modalBackdrop.addEventListener('click', closeModal);
 
         document.getElementById('detail-ai-insight-btn').addEventListener('click', async () => {
-            if(!currentGameForAI) return;
-            openModal();
-            document.getElementById('ai-text').innerText = "正在分析战术...";
-            const res = await callAI(`请分析《${getDisplayTitle(currentGameForAI)}》的核心乐趣，风格幽默。`);
-            document.getElementById('ai-text').innerText = res;
+            openModal(true);
         });
 
         document.getElementById('ai-pick-btn').addEventListener('click', async () => {
-            openModal();
-            document.getElementById('ai-text').innerText = "AI 正在挑选...";
+            openModal(false);
+            showLoading('游戏推荐');
             const titles = allGames.map((g) => getDisplayTitle(g)).join(',');
-            const res = await callAI(`从这些游戏中选一个适合现在玩的: ${titles}。返回游戏名和理由。`);
-            document.getElementById('ai-text').innerText = res;
+            const res = await callAI(`从这些游戏中选一个适合现在玩的: ${titles}。返回游戏名和理由。`, 300);
+            showResult(res, '游戏推荐');
+        });
+        
+        document.getElementById('ai-btn-tactics').addEventListener('click', async () => {
+            if(!currentGameForAI) {
+                showResult('请先选择一个游戏再进行战术分析！', '提示');
+                return;
+            }
+            showLoading('战术分析');
+            const res = await callAI(`请分析《${getDisplayTitle(currentGameForAI)}》的核心乐趣，风格幽默。`, 400);
+            showResult(res, '战术分析');
+        });
+        
+        document.getElementById('ai-btn-recommend').addEventListener('click', async () => {
+            showLoading('游戏推荐');
+            const titles = allGames.map((g) => getDisplayTitle(g)).join(',');
+            const res = await callAI(`从这些游戏中选一个适合现在玩的: ${titles}。返回游戏名和理由。`, 300);
+            showResult(res, '游戏推荐');
+        });
+        
+        document.getElementById('ai-btn-review').addEventListener('click', async () => {
+            if(!currentGameForAI) {
+                showResult('请先选择一个游戏再生成评测！', '提示');
+                return;
+            }
+            showLoading('评测生成');
+            const res = await callAI(`请为《${getDisplayTitle(currentGameForAI)}》写一段简短有趣的游戏评测，100字左右。`, 150);
+            showResult(res, '评测生成');
+        });
+        
+        document.getElementById('ai-btn-mood').addEventListener('click', async () => {
+            const moods = ['放松', '刺激', '挑战', '探索', '社交', '休闲'];
+            const mood = prompt('你现在的心情是？\n可选：' + moods.join('、'));
+            if (!mood) return;
+            showLoading('心情匹配');
+            const titles = allGames.map((g) => getDisplayTitle(g)).join(',');
+            const res = await callAI(`用户现在心情"${mood}"，从这些游戏中推荐一个适合的: ${titles}。返回游戏名和理由。`, 300);
+            showResult(res, '心情匹配');
+        });
+        
+        document.getElementById('ai-custom-send').addEventListener('click', async () => {
+            const input = document.getElementById('ai-custom-input');
+            const question = input.value.trim();
+            if (!question) return;
+            showLoading('AI 思考中...');
+            const titles = allGames.map((g) => getDisplayTitle(g)).join(',');
+            const res = await callAI(`${question}\n\n我的游戏库：${titles}`, 350);
+            showResult(res, 'AI 回答');
+            input.value = '';
+        });
+        
+        document.getElementById('ai-custom-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('ai-custom-send').click();
+            }
         });
 
         // Init
@@ -2106,7 +3239,7 @@
         initGames();
         initCommunity();
         loadHomeContent();
-        document.getElementById('home-refresh-btn')?.addEventListener('click', loadHomeContent);
+        setupRefreshButton('home-refresh-btn', loadHomeContent);
         renderPresets();
         renderLucideIcons();
 
