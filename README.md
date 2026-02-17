@@ -31,9 +31,9 @@
 
 ### 🎮 游戏库管理
 
-- **多平台支持**：自动扫描 Steam、Epic Games、miHoYo、WeGame 等平台已安装的游戏
+- **多平台支持**：自动扫描 Steam、Epic Games等平台已安装的游戏
 - **手动添加**：支持手动选择可执行文件或快捷方式添加游戏
-- **封面自动获取**：自动从 Steam、TheGamesDB 获取游戏封面
+- **封面自动获取**：自动从 Steam 获取游戏封面
 - **拖拽排序**：支持拖拽调整游戏顺序
 - **批量操作**：支持批量删除游戏
 
@@ -68,21 +68,22 @@
 - **流畅动画**：平滑的过渡动画效果
 
 ---
+---
 
 ## 🖼 界面预览
 
 ### 游戏库
 展示所有游戏，支持网格视图和详情视图，可按全部/最近/收藏筛选。
-
+![[游戏库.png]]
 ### 游戏详情
 显示游戏详细信息，包括游玩时间、最后游玩日期、启动按钮、Steam 同步、AI 分析等。
-
+![[游戏详情页.png]]
 ### 社区
 好友列表、好友动态、游戏新闻、用户动态的综合展示。
-
+![[主页.png]]
 ### 设置
 账户配置、Steam API 设置、AI 设置、外观自定义等。
-
+![[游戏设置.png]]
 ---
 
 ## 🚀 快速开始
@@ -98,7 +99,7 @@
 1. **克隆仓库**
 
 ```bash
-git clone https://github.com/yourusername/mizu.git
+git clone https://github.com/qingxian997/mizu.git
 cd mizu/electron
 ```
 
@@ -111,14 +112,14 @@ npm install
 3. **启动应用**
 
 ```bash
-npm start
+npm run start
 ```
 
 ### 构建打包
 
 ```bash
 # 使用 electron-builder 打包
-npx electron-builder --win
+npm run build
 ```
 
 ---
