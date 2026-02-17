@@ -74,20 +74,22 @@
 
 ### 游戏库
 展示所有游戏，支持网格视图和详情视图，可按全部/最近/收藏筛选。
-![Uploading 游戏库.png…]()
+<img width="2082" height="1346" alt="游戏库" src="https://github.com/user-attachments/assets/4e1e199c-de76-4198-9fa7-36cb4d17a915" />
+
 
 ### 游戏详情
 显示游戏详细信息，包括游玩时间、最后游玩日期、启动按钮、Steam 同步、AI 分析等。
-![Uploading 游戏详情页.png…]()
+<img width="2559" height="1599" alt="游戏详情页" src="https://github.com/user-attachments/assets/5d14dfe1-3dcc-4aa9-ba52-8038368b6705" />
+
 
 ### 社区
 好友列表、好友动态、游戏新闻、用户动态的综合展示。
-![Uploading 主页.png…]()
+<img width="2559" height="1599" alt="主页" src="https://github.com/user-attachments/assets/a270cc05-8e87-4240-908f-671daa50338a" />
+
 
 ### 设置
 账户配置、Steam API 设置、AI 设置、外观自定义等。
-![Uploading 游戏设置.png…]()
-
+<img width="2087" height="1358" alt="游戏设置" src="https://github.com/user-attachments/assets/e937eab6-7701-4c9a-900f-9902fa60523b" />
 ---
 
 ## 🚀 快速开始
