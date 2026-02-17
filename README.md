@@ -103,14 +103,14 @@
 1. **克隆仓库**
 
 ```bash
-git clone https://github.com/qingxian997/mizu.git
-cd mizu/electron
+git clone https://github.com/qingxian997/Mizu.git
+cd Mizu/electron
 ```
 
 2. **安装依赖**
 
 ```bash
-npm install
+# npm install electron --save-dev
 ```
 
 3. **启动应用**
