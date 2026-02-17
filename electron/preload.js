@@ -87,4 +87,42 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // 获取磁盘空间信息
   getDiskSpace: () => ipcRenderer.invoke('system:getDiskSpace'),
+
+  // ==================== 自动更新 ====================
+  
+  // 检查更新
+  checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+  
+  // 下载更新
+  downloadUpdate: () => ipcRenderer.invoke('updater:download'),
+  
+  // 安装更新
+  installUpdate: () => ipcRenderer.invoke('updater:install'),
+  
+  // 获取当前版本
+  getAppVersion: () => ipcRenderer.invoke('updater:getVersion'),
+  
+  // 监听更新状态
+  onUpdateStatus: (callback) => {
+    ipcRenderer.on('update-status', (_, data) => callback(data));
+  },
+  
+  // 移除更新状态监听
+  removeUpdateListener: () => {
+    ipcRenderer.removeAllListeners('update-status');
+  },
+
+  // ==================== 窗口控制 ====================
+  
+  // 最小化窗口
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+  
+  // 最大化/还原窗口
+  maximizeWindow: () => ipcRenderer.invoke('window:maximize'),
+  
+  // 关闭窗口
+  closeWindow: () => ipcRenderer.invoke('window:close'),
+  
+  // 检查窗口是否最大化
+  isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
 });

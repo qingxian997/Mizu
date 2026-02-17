@@ -8,14 +8,74 @@
  * - Steam API 集成
  * - 系统托盘支持
  * - AI 功能集成
+ * - 自动更新支持
  */
 
-const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
+const { autoUpdater } = require('electron-updater');
+
+// ==================== 自动更新配置 ====================
+
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
+
+let updateCheckInProgress = false;
+
+function setupAutoUpdater(mainWindow) {
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[Updater] 正在检查更新...');
+    mainWindow?.webContents.send('update-status', { status: 'checking' });
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('[Updater] 发现新版本:', info.version);
+    updateCheckInProgress = false;
+    mainWindow?.webContents.send('update-status', {
+      status: 'available',
+      version: info.version,
+      releaseDate: info.releaseDate,
+      releaseNotes: info.releaseNotes,
+    });
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('[Updater] 当前已是最新版本');
+    updateCheckInProgress = false;
+    mainWindow?.webContents.send('update-status', { status: 'not-available', version: info.version });
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    console.log(`[Updater] 下载进度: ${progress.percent.toFixed(1)}%`);
+    mainWindow?.webContents.send('update-status', {
+      status: 'downloading',
+      percent: progress.percent,
+      transferred: progress.transferred,
+      total: progress.total,
+    });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[Updater] 更新已下载完成');
+    mainWindow?.webContents.send('update-status', {
+      status: 'downloaded',
+      version: info.version,
+    });
+  });
+
+  autoUpdater.on('error', (error) => {
+    console.error('[Updater] 更新错误:', error);
+    updateCheckInProgress = false;
+    mainWindow?.webContents.send('update-status', {
+      status: 'error',
+      message: error.message,
+    });
+  });
+}
 
 // ==================== 常量定义 ====================
 
@@ -1227,13 +1287,14 @@ async function importSteamOwnedGames(apiKey, steamId) {
   }
 }
 
-// ==================== 窗口与托盘管理 ====================
+// ==================== 窗口管理 ====================
 
 function createWindow() {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
     title: 'Mizu',
+    frame: false,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -1244,46 +1305,46 @@ function createWindow() {
 
   win.once('ready-to-show', () => win.show());
   win.loadFile(path.join(__dirname, 'index.html'));
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  win.webContents.on('will-navigate', (event, url) => {
+    const currentUrl = win.webContents.getURL();
+    const isInternal = url.startsWith('file://') || url === currentUrl;
+    if (!isInternal) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
   return win;
 }
 
 let mainWindow = null;
-let tray = null;
-let forceQuit = false;
 
-function getTrayIcon() {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#2563eb"/><path d="M19 27h26v8H19z" fill="#fff"/><path d="M25 21h14v6H25zM25 35h14v8H25z" fill="#bfdbfe"/></svg>`;
-  return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
-}
+ipcMain.handle('window:minimize', () => {
+  mainWindow?.minimize();
+});
 
-function showMainWindow() {
+ipcMain.handle('window:maximize', () => {
   if (!mainWindow) return;
-  mainWindow.setSkipTaskbar(false);
-  if (!mainWindow.isVisible()) mainWindow.show();
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.focus();
-}
+  if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow.maximize();
+  }
+});
 
-function hideToTray() {
-  if (!mainWindow) return;
-  mainWindow.hide();
-  mainWindow.setSkipTaskbar(true);
-}
+ipcMain.handle('window:close', () => {
+  mainWindow?.close();
+});
 
-function createTray() {
-  tray = new Tray(getTrayIcon());
-  tray.setToolTip('Mizu - 游戏库');
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: '显示主窗口', click: showMainWindow },
-    {
-      label: '退出', click: () => {
-        forceQuit = true;
-        app.quit();
-      },
-    },
-  ]));
-  tray.on('double-click', showMainWindow);
-}
+ipcMain.handle('window:isMaximized', () => {
+  return mainWindow?.isMaximized() || false;
+});
 
 ipcMain.handle('games:get', () => readGames());
 ipcMain.handle('games:add', (_, game) => {
@@ -1450,30 +1511,62 @@ ipcMain.handle('games:launch', (_, id) => {
   }
 });
 
-app.whenReady().then(() => {
-  mainWindow = createWindow();
-  createTray();
+// ==================== 自动更新 IPC ====================
 
-  mainWindow.on('close', (event) => {
-    if (forceQuit) return;
-    event.preventDefault();
-    hideToTray();
-  });
-
-  mainWindow.on('minimize', (event) => {
-    event.preventDefault();
-    hideToTray();
-  });
-
-  app.on('activate', () => {
-    if (mainWindow) showMainWindow();
-  });
+ipcMain.handle('updater:check', async () => {
+  if (updateCheckInProgress) {
+    return { ok: false, error: '正在检查中...' };
+  }
+  try {
+    updateCheckInProgress = true;
+    await autoUpdater.checkForUpdates();
+    return { ok: true };
+  } catch (error) {
+    updateCheckInProgress = false;
+    return { ok: false, error: error.message };
+  }
 });
 
-app.on('before-quit', () => {
-  forceQuit = true;
+ipcMain.handle('updater:download', async () => {
+  try {
+    await autoUpdater.downloadUpdate();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle('updater:install', () => {
+  setImmediate(() => {
+    forceQuit = true;
+    autoUpdater.quitAndInstall();
+  });
+  return { ok: true };
+});
+
+ipcMain.handle('updater:getVersion', () => {
+  return app.getVersion();
+});
+
+app.whenReady().then(() => {
+  mainWindow = createWindow();
+
+  setupAutoUpdater(mainWindow);
+
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.log('[Updater] 启动检查更新失败:', err.message);
+    });
+  }, 3000);
+
+  app.on('activate', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin' && forceQuit) app.quit();
+  app.quit();
 });

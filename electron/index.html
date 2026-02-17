@@ -196,9 +196,91 @@
             background: rgba(0,0,0,0.1);
             border-radius: 2px;
         }
+
+        /* 自定义标题栏拖拽样式 */
+        .app-drag {
+            -webkit-app-region: drag;
+        }
+        .app-no-drag {
+            -webkit-app-region: no-drag;
+        }
+
+        /* 禁止全局文本选取，提升拖拽体验 */
+        body {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        input, textarea, [contenteditable="true"] {
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        /* 标题栏自动隐藏 */
+        #titlebar {
+            transform: translateY(-100%);
+            transition: transform 0.2s ease-out;
+        }
+        #titlebar.visible {
+            transform: translateY(0);
+        }
+        #titlebar-trigger {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 8px;
+            z-index: 101;
+        }
+
+        /* Header 区域可拖拽 */
+        .header-drag {
+            -webkit-app-region: drag;
+        }
+        .header-no-drag {
+            -webkit-app-region: no-drag;
+        }
     </style>
 </head>
 <body class="text-slate-800 selection:bg-blue-100 flex flex-col h-screen overflow-hidden relative" id="app-body">
+    
+    <!-- 标题栏触发区域 -->
+    <div id="titlebar-trigger"></div>
+    
+    <!-- 自定义标题栏 -->
+    <div id="titlebar" class="fixed top-0 left-0 right-0 h-8 bg-white/80 backdrop-blur-xl z-[100] flex items-center justify-between select-none app-drag" style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+        <div class="flex items-center gap-2 pl-3">
+            <div class="w-4 h-4 rounded theme-bg flex items-center justify-center">
+                <svg viewBox="0 0 24 24" class="w-3 h-3 text-white" fill="currentColor">
+                    <path d="M4 6h16v3H4zM6 11h12v3H6zM8 16h8v3H8z"/>
+                </svg>
+            </div>
+            <span class="text-xs font-medium text-slate-600">Mizu</span>
+        </div>
+        <div class="flex items-center app-no-drag">
+            <button id="titlebar-minimize" class="w-11 h-8 flex items-center justify-center hover:bg-black/5 transition-colors" title="最小化">
+                <svg class="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M5 12h14"/>
+                </svg>
+            </button>
+            <button id="titlebar-maximize" class="w-11 h-8 flex items-center justify-center hover:bg-black/5 transition-colors" title="最大化">
+                <svg id="maximize-icon" class="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="4" y="4" width="16" height="16" rx="1"/>
+                </svg>
+                <svg id="restore-icon" class="w-3.5 h-3.5 text-slate-500 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="6" y="6" width="12" height="12" rx="1"/>
+                    <path d="M4 8V5a1 1 0 011-1h3"/>
+                </svg>
+            </button>
+            <button id="titlebar-close" class="w-11 h-8 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors" title="关闭">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M6 6l12 12M6 18L18 6"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+    
+    <!-- 主内容区域 -->
+    <div class="flex flex-col flex-1 overflow-hidden">
     
     <!-- 默认背景光晕 (有自定义壁纸时隐藏) -->
     <!-- z-index 0: 放在最底层，但必须在 overlay 之下 -->
@@ -213,14 +295,14 @@
     <div id="bg-overlay" class="fixed inset-0 z-0 pointer-events-none transition-colors duration-300" style="background-color: rgba(0, 0, 0, 0);"></div>
 
     <!-- 1. Header -->
-    <header class="flex items-center justify-between px-6 py-3 bg-white/70 backdrop-blur-xl sticky top-0 z-50 shadow-sm border-b border-white/60">
-        <div class="flex items-center gap-4 w-64">
+    <header class="header-drag relative flex items-center justify-between px-6 py-3 bg-white/70 backdrop-blur-xl sticky top-0 z-50 shadow-sm border-b border-white/60">
+        <div class="header-no-drag flex items-center gap-4 w-64">
             <div id="header-logo" class="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-700 to-slate-500 cursor-pointer hover:opacity-80 transition-opacity" style="background-image: linear-gradient(to right, var(--primary-color), var(--primary-hover));">
                 Mizu
             </div>
         </div>
 
-        <div class="flex-1 max-w-2xl mx-4">
+        <div class="header-no-drag flex-1 max-w-2xl mx-4">
             <div class="relative group">
                 <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <i data-lucide="search" class="text-slate-400 w-5 h-5 group-focus-within:theme-text transition-colors"></i>
@@ -229,12 +311,24 @@
             </div>
         </div>
 
-        <div class="flex items-center gap-3 w-64 justify-end">
+        <div class="header-no-drag flex items-center gap-3 w-64 justify-end">
             <button id="view-toggle-btn" class="p-2 rounded-full hover:bg-black/5 text-slate-600 transition-colors fade-visible" title="切换视图">
                 <i id="view-icon" data-lucide="grid" class="w-6 h-6"></i>
             </button>
-            <div id="user-avatar-btn" class="w-9 h-9 rounded-full text-white flex items-center justify-center font-medium shadow-md hover:shadow-lg transition-all cursor-pointer theme-bg theme-hover" title="前往设置">
+            <div id="user-avatar-btn" class="w-9 h-9 rounded-full text-white flex items-center justify-center font-medium shadow-md hover:shadow-lg transition-all cursor-pointer theme-bg theme-hover" title="前往设置 (左键) / 退出菜单 (右键)">
                 G
+            </div>
+            <!-- 用户菜单 -->
+            <div id="user-menu" class="absolute right-6 top-14 w-40 bg-white/95 backdrop-blur-xl rounded-xl shadow-xl border border-white/60 hidden z-50">
+                <button id="user-menu-settings" class="w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-black/5 rounded-t-xl flex items-center gap-2 transition-colors">
+                    <i data-lucide="settings" class="w-4 h-4"></i>
+                    设置
+                </button>
+                <div class="h-px bg-slate-200/50"></div>
+                <button id="user-menu-exit" class="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 rounded-b-xl flex items-center gap-2 transition-colors">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                    退出应用
+                </button>
             </div>
         </div>
     </header>
@@ -643,6 +737,41 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Update Modal -->
+    <div id="update-modal" class="fixed inset-0 z-[110] hidden flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/30 backdrop-blur-sm"></div>
+        <div class="relative w-full max-w-md mx-4 glass-panel p-6 bg-white/95">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-12 h-12 rounded-full theme-bg-light flex items-center justify-center">
+                    <i data-lucide="download" class="w-6 h-6 theme-text"></i>
+                </div>
+                <div>
+                    <h3 id="update-modal-title" class="text-xl font-bold text-slate-800">发现新版本</h3>
+                    <p id="update-modal-version" class="text-sm text-slate-500">v1.0.0</p>
+                </div>
+            </div>
+            <div id="update-modal-content" class="mb-6">
+                <div id="update-release-notes" class="text-sm text-slate-600 mb-4 max-h-40 overflow-y-auto"></div>
+                <div id="update-progress-container" class="hidden">
+                    <div class="flex items-center justify-between text-xs text-slate-500 mb-2">
+                        <span>下载进度</span>
+                        <span id="update-progress-percent">0%</span>
+                    </div>
+                    <div class="h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div id="update-progress-bar" class="h-full theme-bg transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+            <div id="update-modal-actions" class="flex gap-3">
+                <button id="update-later-btn" class="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-medium hover:bg-slate-200 transition-colors">稍后提醒</button>
+                <button id="update-download-btn" class="flex-1 py-3 text-white rounded-xl font-medium theme-bg theme-hover">立即更新</button>
+            </div>
+            <div id="update-install-actions" class="hidden flex gap-3">
+                <button id="update-install-btn" class="flex-1 py-3 text-white rounded-xl font-medium theme-bg theme-hover">立即安装并重启</button>
             </div>
         </div>
     </div>
@@ -2924,7 +3053,42 @@
 
         tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
         document.getElementById('header-logo').addEventListener('click', () => switchTab('Home'));
-        document.getElementById('user-avatar-btn').addEventListener('click', () => switchTab('Settings'));
+        
+        // 用户头像按钮 - 左键进入设置，右键显示菜单
+        const userAvatarBtn = document.getElementById('user-avatar-btn');
+        const userMenu = document.getElementById('user-menu');
+        const userMenuSettings = document.getElementById('user-menu-settings');
+        const userMenuExit = document.getElementById('user-menu-exit');
+
+        userAvatarBtn.addEventListener('click', () => {
+            userMenu.classList.add('hidden');
+            switchTab('Settings');
+        });
+
+        userAvatarBtn.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            userMenu.classList.toggle('hidden');
+            renderLucideIcons();
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!userAvatarBtn.contains(e.target) && !userMenu.contains(e.target)) {
+                userMenu.classList.add('hidden');
+            }
+        });
+
+        userMenuSettings.addEventListener('click', () => {
+            userMenu.classList.add('hidden');
+            switchTab('Settings');
+        });
+
+        userMenuExit.addEventListener('click', () => {
+            userMenu.classList.add('hidden');
+            if (electronAPI?.closeWindow) {
+                electronAPI.closeWindow();
+            }
+        });
+
         // Menu toggle logic removed as button is removed
         
         // Search & Filter
@@ -3232,6 +3396,174 @@
             }
         });
 
+        // ==================== 自动更新模块 ====================
+        const updateModal = document.getElementById('update-modal');
+        const updateModalTitle = document.getElementById('update-modal-title');
+        const updateModalVersion = document.getElementById('update-modal-version');
+        const updateReleaseNotes = document.getElementById('update-release-notes');
+        const updateProgressContainer = document.getElementById('update-progress-container');
+        const updateProgressBar = document.getElementById('update-progress-bar');
+        const updateProgressPercent = document.getElementById('update-progress-percent');
+        const updateModalActions = document.getElementById('update-modal-actions');
+        const updateInstallActions = document.getElementById('update-install-actions');
+        const updateDownloadBtn = document.getElementById('update-download-btn');
+        const updateLaterBtn = document.getElementById('update-later-btn');
+        const updateInstallBtn = document.getElementById('update-install-btn');
+
+        let currentUpdateInfo = null;
+
+        function showUpdateModal(info) {
+            currentUpdateInfo = info;
+            updateModalTitle.textContent = '发现新版本';
+            updateModalVersion.textContent = `v${info.version || '未知'}`;
+            
+            if (info.releaseNotes) {
+                const notes = typeof info.releaseNotes === 'string' 
+                    ? info.releaseNotes 
+                    : info.releaseNotes.map(n => n.note).join('\n');
+                updateReleaseNotes.textContent = notes;
+            } else {
+                updateReleaseNotes.textContent = '暂无更新说明';
+            }
+            
+            updateProgressContainer.classList.add('hidden');
+            updateModalActions.classList.remove('hidden');
+            updateInstallActions.classList.add('hidden');
+            updateModal.classList.remove('hidden');
+            renderLucideIcons();
+        }
+
+        function hideUpdateModal() {
+            updateModal.classList.add('hidden');
+        }
+
+        function updateDownloadProgress(percent) {
+            updateProgressContainer.classList.remove('hidden');
+            updateProgressBar.style.width = `${percent}%`;
+            updateProgressPercent.textContent = `${percent.toFixed(1)}%`;
+        }
+
+        if (electronAPI?.onUpdateStatus) {
+            electronAPI.onUpdateStatus((data) => {
+                console.log('[Updater] 状态更新:', data);
+                
+                switch (data.status) {
+                    case 'available':
+                        showUpdateModal(data);
+                        break;
+                    case 'downloading':
+                        updateDownloadProgress(data.percent || 0);
+                        break;
+                    case 'downloaded':
+                        updateModalTitle.textContent = '更新已就绪';
+                        updateProgressContainer.classList.add('hidden');
+                        updateModalActions.classList.add('hidden');
+                        updateInstallActions.classList.remove('hidden');
+                        break;
+                    case 'error':
+                        console.error('[Updater] 更新错误:', data.message);
+                        break;
+                }
+            });
+        }
+
+        if (updateDownloadBtn) {
+            updateDownloadBtn.addEventListener('click', async () => {
+                updateDownloadBtn.disabled = true;
+                updateDownloadBtn.textContent = '正在下载...';
+                updateProgressContainer.classList.remove('hidden');
+                
+                try {
+                    if (electronAPI?.downloadUpdate) {
+                        await electronAPI.downloadUpdate();
+                    }
+                } catch (error) {
+                    console.error('[Updater] 下载失败:', error);
+                    updateDownloadBtn.disabled = false;
+                    updateDownloadBtn.textContent = '立即更新';
+                }
+            });
+        }
+
+        if (updateLaterBtn) {
+            updateLaterBtn.addEventListener('click', () => {
+                hideUpdateModal();
+            });
+        }
+
+        if (updateInstallBtn) {
+            updateInstallBtn.addEventListener('click', async () => {
+                if (electronAPI?.installUpdate) {
+                    await electronAPI.installUpdate();
+                }
+            });
+        }
+
+        // ==================== 标题栏控制 ====================
+        const titlebar = document.getElementById('titlebar');
+        const titlebarTrigger = document.getElementById('titlebar-trigger');
+        const titlebarMinimize = document.getElementById('titlebar-minimize');
+        const titlebarMaximize = document.getElementById('titlebar-maximize');
+        const titlebarClose = document.getElementById('titlebar-close');
+        const maximizeIcon = document.getElementById('maximize-icon');
+        const restoreIcon = document.getElementById('restore-icon');
+
+        let titlebarHideTimer = null;
+
+        function showTitlebar() {
+            titlebar.classList.add('visible');
+            clearTimeout(titlebarHideTimer);
+        }
+
+        function hideTitlebar() {
+            titlebarHideTimer = setTimeout(() => {
+                titlebar.classList.remove('visible');
+            }, 500);
+        }
+
+        titlebarTrigger.addEventListener('mouseenter', showTitlebar);
+        titlebar.addEventListener('mouseenter', showTitlebar);
+        titlebar.addEventListener('mouseleave', hideTitlebar);
+
+        async function updateMaximizeIcon() {
+            if (!electronAPI?.isMaximized) return;
+            const isMax = await electronAPI.isMaximized();
+            if (isMax) {
+                maximizeIcon.classList.add('hidden');
+                restoreIcon.classList.remove('hidden');
+            } else {
+                maximizeIcon.classList.remove('hidden');
+                restoreIcon.classList.add('hidden');
+            }
+        }
+
+        if (titlebarMinimize) {
+            titlebarMinimize.addEventListener('click', () => {
+                if (electronAPI?.minimizeWindow) {
+                    electronAPI.minimizeWindow();
+                }
+            });
+        }
+
+        if (titlebarMaximize) {
+            titlebarMaximize.addEventListener('click', async () => {
+                if (electronAPI?.maximizeWindow) {
+                    await electronAPI.maximizeWindow();
+                    updateMaximizeIcon();
+                }
+            });
+        }
+
+        if (titlebarClose) {
+            titlebarClose.addEventListener('click', () => {
+                if (electronAPI?.closeWindow) {
+                    electronAPI.closeWindow();
+                }
+            });
+        }
+
+        updateMaximizeIcon();
+
         // Init
         initStartupTime();
         loadAIConfig();
@@ -3244,5 +3576,6 @@
         renderLucideIcons();
 
     </script>
+    </div>
 </body>
 </html>
